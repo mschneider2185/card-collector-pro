@@ -111,9 +111,6 @@ export default function UploadPage() {
         setUploadedImage(publicUrl)
       }
 
-      // Success message
-      alert(`${isBackImage ? 'Back' : 'Front'} image uploaded successfully!`)
-
     } catch (error) {
       console.error('Error uploading image:', error)
       alert('Error uploading image. Please try again.')
