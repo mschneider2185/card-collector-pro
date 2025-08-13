@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Card, UserCard } from '@/types'
+import { UserCard } from '@/types'
 import { User } from '@supabase/supabase-js'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -15,7 +15,7 @@ interface CardModalProps {
 }
 
 function CardModal({ userCard, onClose, onAddToCollection, user }: CardModalProps) {
-  const [showBack, setShowBack] = useState(false)
+
   const card = userCard.card
   
   return (
@@ -37,14 +37,14 @@ function CardModal({ userCard, onClose, onAddToCollection, user }: CardModalProp
           <div className="space-y-8">
             {/* Card Images - Side by Side */}
             <div className="flex justify-center">
-              {(card as any)?.back_image_url ? (
+              {(card?.back_image_url) ? (
                 // Show both front and back images side by side
                 <div className="flex gap-8 justify-center">
                   <div className="text-center">
                     <h3 className="text-sm font-medium text-gray-700 mb-3">Front</h3>
                     <div className="relative w-64 aspect-[2.5/3.5] bg-gray-50 rounded-lg overflow-hidden shadow-lg">
                       <Image
-                        src={(card as any).front_image_url || card.image_url || ''}
+                        src={card.front_image_url || card.image_url || ''}
                         alt={`${card.player_name || 'Unknown'} card front`}
                         fill
                         className="object-contain"
@@ -55,7 +55,7 @@ function CardModal({ userCard, onClose, onAddToCollection, user }: CardModalProp
                     <h3 className="text-sm font-medium text-gray-700 mb-3">Back</h3>
                     <div className="relative w-64 aspect-[2.5/3.5] bg-gray-50 rounded-lg overflow-hidden shadow-lg">
                       <Image
-                        src={(card as any).back_image_url}
+                        src={card.back_image_url}
                         alt={`${card.player_name || 'Unknown'} card back`}
                         fill
                         className="object-contain"
@@ -68,8 +68,8 @@ function CardModal({ userCard, onClose, onAddToCollection, user }: CardModalProp
                 <div className="text-center">
                   <div className="relative w-64 aspect-[2.5/3.5] bg-gray-50 rounded-lg overflow-hidden shadow-lg mx-auto">
                     <Image
-                      src={(card as any).front_image_url || card.image_url || ''}
-                      alt={`${card.player_name || 'Unknown'} card`}
+                      src={card?.front_image_url || card?.image_url || ''}
+                      alt={`${card?.player_name || 'Unknown'} card`}
                       fill
                       className="object-contain"
                     />
@@ -83,7 +83,7 @@ function CardModal({ userCard, onClose, onAddToCollection, user }: CardModalProp
               {/* Main card info in grid */}
               <div className="grid grid-cols-3 md:grid-cols-5 gap-6">
                 {/* Year */}
-                {card.year && (
+                {card?.year && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
                     <div className="text-lg font-semibold">{card.year}</div>
@@ -91,7 +91,7 @@ function CardModal({ userCard, onClose, onAddToCollection, user }: CardModalProp
                 )}
                 
                 {/* Player Name */}
-                {card.player_name && (
+                {card?.player_name && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Player Name</label>
                     <div className="text-lg font-semibold">{card.player_name}</div>
@@ -99,7 +99,7 @@ function CardModal({ userCard, onClose, onAddToCollection, user }: CardModalProp
                 )}
                 
                 {/* Team */}
-                {card.team && (
+                {card?.team && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Team</label>
                     <div className="text-lg font-semibold">{card.team}</div>
@@ -107,7 +107,7 @@ function CardModal({ userCard, onClose, onAddToCollection, user }: CardModalProp
                 )}
                 
                 {/* Position */}
-                {card.position && (
+                {card?.position && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
                     <div className="text-lg font-semibold">{card.position}</div>
@@ -115,7 +115,7 @@ function CardModal({ userCard, onClose, onAddToCollection, user }: CardModalProp
                 )}
                 
                 {/* Sport */}
-                {card.sport && (
+                {card?.sport && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Sport</label>
                     <div className="text-lg font-semibold capitalize">{card.sport}</div>
@@ -126,7 +126,7 @@ function CardModal({ userCard, onClose, onAddToCollection, user }: CardModalProp
               {/* Brand and Series in second row */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Brand */}
-                {card.brand && (
+                {card?.brand && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
                     <div className="text-lg font-semibold">{card.brand}</div>
@@ -134,7 +134,7 @@ function CardModal({ userCard, onClose, onAddToCollection, user }: CardModalProp
                 )}
                 
                 {/* Series */}
-                {card.series && (
+                {card?.series && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Series</label>
                     <div className="text-lg font-semibold">{card.series}</div>
@@ -146,17 +146,17 @@ function CardModal({ userCard, onClose, onAddToCollection, user }: CardModalProp
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Attributes</label>
                 <div className="flex flex-wrap gap-2">
-                  {(card as any)?.rookie && (
+                  {card?.rookie && (
                     <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
                       Rookie Card
                     </span>
                   )}
-                  {(card as any)?.autographed && (
+                  {card?.autographed && (
                     <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
                       Autographed
                     </span>
                   )}
-                  {(card as any)?.patch && (
+                  {card?.patch && (
                     <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium">
                       Patch/Jersey
                     </span>
@@ -457,10 +457,10 @@ export default function CardsPage() {
                 className="group bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-white/20 overflow-hidden cursor-pointer"
                 onClick={() => setSelectedCard(userCard)}
               >
-                {userCard.card?.image_url || (userCard.card as any)?.front_image_url ? (
+                {userCard.card?.image_url || userCard.card?.front_image_url ? (
                   <div className="relative aspect-[2.5/3.5] overflow-hidden">
                     <Image 
-                      src={(userCard.card as any)?.front_image_url || userCard.card?.image_url || ''} 
+                      src={userCard.card?.front_image_url || userCard.card?.image_url || ''} 
                       alt={`${userCard.card?.player_name || 'Unknown'} card`}
                       fill
                       className="object-contain group-hover:scale-105 transition-transform duration-300 bg-gray-50"
@@ -503,17 +503,17 @@ export default function CardsPage() {
                       )}
                     </div>
                     <div className="flex flex-wrap gap-1">
-                      {(userCard.card as any)?.rookie && (
+                      {userCard.card?.rookie && (
                         <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full text-xs font-medium">
                           RC
                         </span>
                       )}
-                      {(userCard.card as any)?.autographed && (
+                      {userCard.card?.autographed && (
                         <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs font-medium">
                           Auto
                         </span>
                       )}
-                      {(userCard.card as any)?.patch && (
+                      {userCard.card?.patch && (
                         <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
                           Patch
                         </span>

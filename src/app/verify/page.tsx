@@ -15,7 +15,7 @@ interface CardUpload {
   confidence_score: number
   created_at: string
   ocr_text?: string
-  processing_metadata?: any
+  processing_metadata?: Record<string, unknown>
 }
 
 interface CardFormData {

@@ -15,7 +15,7 @@ interface CardModalProps {
 }
 
 function CardModal({ userCard, onClose, onDelete, onUpdate }: CardModalProps) {
-  const [showBack, setShowBack] = useState(false)
+
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({
     quantity: userCard.quantity,
@@ -94,49 +94,49 @@ function CardModal({ userCard, onClose, onDelete, onUpdate }: CardModalProps) {
           </div>
           
           <div className="space-y-8">
-            {/* Card Images - Side by Side */}
-            <div className="flex justify-center">
-              {(userCard.card as any)?.back_image_url ? (
-                // Show both front and back images side by side
-                <div className="flex gap-8 justify-center">
-                  <div className="text-center">
-                    <h3 className="text-sm font-medium text-gray-700 mb-3">Front</h3>
-                    <div className="relative w-64 aspect-[2.5/3.5] bg-gray-50 rounded-lg overflow-hidden shadow-lg">
-                      <Image
-                        src={(userCard.card as any).front_image_url || userCard.card?.image_url || ''}
-                        alt={`${userCard.card?.player_name || 'Unknown'} card front`}
-                        fill
-                        className="object-contain"
-                      />
+                          {/* Card Images - Side by Side */}
+              <div className="flex justify-center">
+                {(userCard.card?.back_image_url) ? (
+                  // Show both front and back images side by side
+                  <div className="flex gap-8 justify-center">
+                    <div className="text-center">
+                      <h3 className="text-sm font-medium text-gray-700 mb-3">Front</h3>
+                      <div className="relative w-64 aspect-[2.5/3.5] bg-gray-50 rounded-lg overflow-hidden shadow-lg">
+                        <Image
+                          src={userCard.card.front_image_url || userCard.card.image_url || ''}
+                          alt={`${userCard.card?.player_name || 'Unknown'} card front`}
+                          fill
+                          className="object-contain"
+                        />
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <h3 className="text-sm font-medium text-gray-700 mb-3">Back</h3>
+                      <div className="relative w-64 aspect-[2.5/3.5] bg-gray-50 rounded-lg overflow-hidden shadow-lg">
+                        <Image
+                          src={userCard.card.back_image_url}
+                          alt={`${userCard.card?.player_name || 'Unknown'} card back`}
+                          fill
+                          className="object-contain"
+                        />
+                      </div>
                     </div>
                   </div>
+                ) : (
+                  // Show only front image centered
                   <div className="text-center">
-                    <h3 className="text-sm font-medium text-gray-700 mb-3">Back</h3>
-                    <div className="relative w-64 aspect-[2.5/3.5] bg-gray-50 rounded-lg overflow-hidden shadow-lg">
-                      <Image
-                        src={(userCard.card as any).back_image_url}
-                        alt={`${userCard.card?.player_name || 'Unknown'} card back`}
-                        fill
-                        className="object-contain"
-                      />
+                    <div className="relative w-64 aspect-[2.5/3.5] bg-gray-50 rounded-lg overflow-hidden shadow-lg mx-auto">
+                      {userCard.card && (
+                        <Image
+                          src={userCard.card.front_image_url || userCard.card.image_url || ''}
+                          alt={`${userCard.card.player_name || 'Unknown'} card`}
+                          fill
+                          className="object-contain"
+                        />
+                      )}
                     </div>
                   </div>
-                </div>
-              ) : (
-                // Show only front image centered
-                <div className="text-center">
-                  <div className="relative w-64 aspect-[2.5/3.5] bg-gray-50 rounded-lg overflow-hidden shadow-lg mx-auto">
-                    {userCard.card && (
-                      <Image
-                        src={(userCard.card as any).front_image_url || userCard.card.image_url || ''}
-                        alt={`${userCard.card.player_name || 'Unknown'} card`}
-                        fill
-                        className="object-contain"
-                      />
-                    )}
-                  </div>
-                </div>
-              )}
+                )}
             </div>
             
             {/* Card Details - Below Images */}
@@ -205,23 +205,23 @@ function CardModal({ userCard, onClose, onDelete, onUpdate }: CardModalProps) {
               
               {/* Attributes */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Attributes</label>
-                <div className="flex flex-wrap gap-2">
-                  {(userCard.card as any)?.rookie && (
-                    <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
-                      Rookie Card
-                    </span>
-                  )}
-                  {(userCard.card as any)?.autographed && (
-                    <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
-                      Autographed
-                    </span>
-                  )}
-                  {(userCard.card as any)?.patch && (
-                    <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium">
-                      Patch/Jersey
-                    </span>
-                  )}
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">Attributes</label>
+                  <div className="flex flex-wrap gap-2">
+                    {userCard.card?.rookie && (
+                      <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
+                        Rookie Card
+                      </span>
+                    )}
+                    {userCard.card?.autographed && (
+                      <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
+                        Autographed
+                      </span>
+                    )}
+                    {userCard.card?.patch && (
+                      <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium">
+                        Patch/Jersey
+                      </span>
+                    )}
                 </div>
               </div>
 
@@ -541,10 +541,10 @@ export default function CollectionPage() {
                 className="group bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-white/20 overflow-hidden cursor-pointer"
                 onClick={() => setSelectedCard(userCard)}
               >
-                {userCard.card?.image_url || (userCard.card as any)?.front_image_url ? (
+                {userCard.card?.image_url || userCard.card?.front_image_url ? (
                   <div className="relative aspect-[2.5/3.5] overflow-hidden">
                     <Image 
-                      src={(userCard.card as any).front_image_url || userCard.card.image_url || ''} 
+                      src={userCard.card?.front_image_url || userCard.card.image_url || ''} 
                       alt={`${userCard.card?.player_name || 'Unknown'} card`}
                       fill
                       className="object-contain group-hover:scale-105 transition-transform duration-300 bg-gray-50"
@@ -586,17 +586,17 @@ export default function CollectionPage() {
                       )}
                     </div>
                     <div className="flex flex-wrap gap-1">
-                      {(userCard.card as any)?.rookie && (
+                      {userCard.card?.rookie && (
                         <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full text-xs font-medium">
                           RC
                         </span>
                       )}
-                      {(userCard.card as any)?.autographed && (
+                      {userCard.card?.autographed && (
                         <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs font-medium">
                           Auto
                         </span>
                       )}
-                      {(userCard.card as any)?.patch && (
+                      {userCard.card?.patch && (
                         <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
                           Patch
                         </span>

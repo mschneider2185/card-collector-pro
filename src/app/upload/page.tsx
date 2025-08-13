@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { User } from '@supabase/supabase-js'
 import Link from 'next/link'
-import Image from 'next/image'
+
 import { CardExtractionResult } from '@/app/api/ai/process-card/route'
 
 interface CardData {
@@ -32,7 +32,7 @@ interface ProcessingResult {
   extractedData: CardExtractionResult
   confidence: number
   ocrText?: string
-  processingMetadata?: any
+  processingMetadata?: Record<string, unknown>
 }
 
 export default function UploadPage() {

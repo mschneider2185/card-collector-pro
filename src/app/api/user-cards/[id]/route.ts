@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { UserCardUpdateData } from '@/types'
 
 const supabaseServiceRole = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,10 +9,10 @@ const supabaseServiceRole = createClient(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
     const { quantity, condition, notes, is_for_trade, acquired_at, user_id } = body
 
@@ -36,7 +37,7 @@ export async function PATCH(
     }
 
     // Update the user card
-    const updateData: any = {}
+    const updateData: UserCardUpdateData = {}
     if (quantity !== undefined) updateData.quantity = quantity
     if (condition !== undefined) updateData.condition = condition
     if (notes !== undefined) updateData.notes = notes

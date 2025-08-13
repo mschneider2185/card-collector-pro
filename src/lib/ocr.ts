@@ -1,3 +1,5 @@
+import { GoogleVisionAnnotation } from '@/types'
+
 export interface OCRResult {
   text: string
   confidence: number
@@ -99,14 +101,14 @@ export async function extractTextWithGoogleVision(imageUrl: string): Promise<OCR
     console.log('Extracted text from image:', fullText.substring(0, 100) + '...')
     
     // Extract individual words with bounding boxes
-    const words: OCRWord[] = textAnnotations.slice(1).map((annotation: any) => ({
+    const words: OCRWord[] = textAnnotations.slice(1).map((annotation: GoogleVisionAnnotation) => ({
       text: annotation.description || '',
       confidence: 0.9, // Google Vision doesn't provide confidence scores for individual words
       boundingBox: {
-        x: annotation.boundingPoly?.vertices[0]?.x || 0,
-        y: annotation.boundingPoly?.vertices[0]?.y || 0,
-        width: (annotation.boundingPoly?.vertices[1]?.x || 0) - (annotation.boundingPoly?.vertices[0]?.x || 0),
-        height: (annotation.boundingPoly?.vertices[2]?.y || 0) - (annotation.boundingPoly?.vertices[0]?.y || 0)
+        x: annotation.boundingPoly?.vertices?.[0]?.x || 0,
+        y: annotation.boundingPoly?.vertices?.[0]?.y || 0,
+        width: (annotation.boundingPoly?.vertices?.[1]?.x || 0) - (annotation.boundingPoly?.vertices?.[0]?.x || 0),
+        height: (annotation.boundingPoly?.vertices?.[2]?.y || 0) - (annotation.boundingPoly?.vertices?.[0]?.y || 0)
       }
     }))
 
