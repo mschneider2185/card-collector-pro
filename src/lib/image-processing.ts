@@ -143,7 +143,7 @@ export async function preprocessImage(imageUrl: string): Promise<ImagePreprocess
  * Generate vector embeddings for image similarity search
  * This would integrate with services like OpenAI CLIP or similar
  */
-export async function generateImageEmbeddings(imageUrl: string): Promise<number[]> {
+export async function generateImageEmbeddings(_imageUrl: string): Promise<number[]> {
   // Mock implementation - would integrate with actual embedding service
   return new Array(512).fill(0).map(() => Math.random())
 }
@@ -151,7 +151,7 @@ export async function generateImageEmbeddings(imageUrl: string): Promise<number[
 /**
  * Detect card orientation and suggest rotation
  */
-export function detectCardOrientation(imageData: ImageData): {
+export function detectCardOrientation(_imageData: ImageData): {
   suggestedRotation: number
   confidence: number
   isPortrait: boolean
@@ -167,7 +167,7 @@ export function detectCardOrientation(imageData: ImageData): {
 /**
  * Extract color palette from card for visual matching
  */
-export function extractColorPalette(imageUrl: string): Promise<string[]> {
+export function extractColorPalette(_imageUrl: string): Promise<string[]> {
   // Mock implementation - would analyze dominant colors
   return Promise.resolve(['#1f2937', '#3b82f6', '#ef4444', '#10b981'])
 }

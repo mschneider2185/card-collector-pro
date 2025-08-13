@@ -118,7 +118,7 @@ export default function VerifyPage() {
     
     try {
       // First, create or find the card in the cards table
-      const { data: existingCard, error: findError } = await supabase
+      const { data: existingCard } = await supabase
         .from('cards')
         .select('*')
         .eq('sport', formData.sport)

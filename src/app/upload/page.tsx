@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { User } from '@supabase/supabase-js'
 import Link from 'next/link'
+import Image from 'next/image'
+import CameraCapture from '@/components/CameraCapture'
 
 import { CardExtractionResult } from '@/app/api/ai/process-card/route'
 
@@ -43,6 +45,8 @@ export default function UploadPage() {
   const [showCardForm, setShowCardForm] = useState(false)
   const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null)
   const [processing, setProcessing] = useState(false)
+  const [showCamera, setShowCamera] = useState(false)
+  const [cameraMode, setCameraMode] = useState<'front' | 'back'>('front')
   const [cardData, setCardData] = useState<CardData>({
     sport: '',
     year: new Date().getFullYear(),
@@ -407,6 +411,16 @@ export default function UploadPage() {
     event.preventDefault()
   }
 
+  const handleCameraCapture = (file: File) => {
+    uploadImage(file, cameraMode === 'back')
+    setShowCamera(false)
+  }
+
+  const openCamera = (mode: 'front' | 'back') => {
+    setCameraMode(mode)
+    setShowCamera(true)
+  }
+
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
@@ -475,21 +489,38 @@ export default function UploadPage() {
                 {uploadedImage ? (
                   <div className="space-y-4">
                     <div className="relative w-full aspect-[2.5/3.5] bg-gray-100 rounded-lg overflow-hidden">
-                      <img src={uploadedImage} alt="Front of card" className="w-full h-full object-contain" />
+                      <Image 
+                        src={uploadedImage} 
+                        alt="Front of card" 
+                        fill
+                        className="object-contain"
+                      />
                     </div>
                     <p className="text-sm text-green-600 font-medium">✓ Front image uploaded</p>
-                    <label className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg cursor-pointer transition-colors">
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                      </svg>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFrontFileSelect}
-                        className="sr-only"
-                      />
-                      Replace
-                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                      <label className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg cursor-pointer transition-colors">
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFrontFileSelect}
+                          className="sr-only"
+                        />
+                        Replace
+                      </label>
+                      <button
+                        onClick={() => openCamera('front')}
+                        className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
+                      >
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Retake Photo
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div>
@@ -500,18 +531,30 @@ export default function UploadPage() {
                     </div>
                     <h4 className="text-lg font-semibold text-gray-900 mb-2">Upload Front</h4>
                     <p className="text-gray-600 mb-4 text-sm">Required</p>
-                    <label className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer">
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFrontFileSelect}
-                        className="sr-only"
-                      />
-                      Choose Front
-                    </label>
+                    <div className="flex flex-col gap-3">
+                      <label className="inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer">
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFrontFileSelect}
+                          className="sr-only"
+                        />
+                        Choose from Gallery
+                      </label>
+                      <button
+                        onClick={() => openCamera('front')}
+                        className="inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+                      >
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Take Photo
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -528,21 +571,38 @@ export default function UploadPage() {
                 {uploadedBackImage ? (
                   <div className="space-y-4">
                     <div className="relative w-full aspect-[2.5/3.5] bg-gray-100 rounded-lg overflow-hidden">
-                      <img src={uploadedBackImage} alt="Back of card" className="w-full h-full object-contain" />
+                      <Image 
+                        src={uploadedBackImage} 
+                        alt="Back of card" 
+                        fill
+                        className="object-contain"
+                      />
                     </div>
                     <p className="text-sm text-green-600 font-medium">✓ Back image uploaded</p>
-                    <label className="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg cursor-pointer transition-colors">
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                      </svg>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleBackFileSelect}
-                        className="sr-only"
-                      />
-                      Replace
-                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                      <label className="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg cursor-pointer transition-colors">
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleBackFileSelect}
+                          className="sr-only"
+                        />
+                        Replace
+                      </label>
+                      <button
+                        onClick={() => openCamera('back')}
+                        className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
+                      >
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Retake Photo
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div>
@@ -553,18 +613,30 @@ export default function UploadPage() {
                     </div>
                     <h4 className="text-lg font-semibold text-gray-900 mb-2">Upload Back</h4>
                     <p className="text-gray-600 mb-4 text-sm">Optional (improves accuracy)</p>
-                    <label className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer">
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleBackFileSelect}
-                        className="sr-only"
-                      />
-                      Choose Back
-                    </label>
+                    <div className="flex flex-col gap-3">
+                      <label className="inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer">
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleBackFileSelect}
+                          className="sr-only"
+                        />
+                        Choose from Gallery
+                      </label>
+                      <button
+                        onClick={() => openCamera('back')}
+                        className="inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+                      >
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Take Photo
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -937,14 +1009,75 @@ export default function UploadPage() {
                   <span className="text-blue-600 font-bold text-sm">6</span>
                 </div>
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">High Resolution</h4>
-                  <p className="text-gray-600 text-sm">Use the highest resolution your camera allows</p>
+                  <h4 className="font-semibold text-gray-900 mb-1">Camera Tips</h4>
+                  <p className="text-gray-600 text-sm">Hold steady, use the card frame guide, and ensure good focus</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Mobile Camera Tips */}
+          <div className="mt-8 p-6 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-xl">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h4 className="text-lg font-medium text-green-800 mb-2">
+                  📱 Mobile Camera Features
+                </h4>
+                <p className="text-green-700 mb-4">
+                  Use your device&apos;s camera for instant card capture! The camera interface includes helpful guides and supports both front and back cameras.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                  <div className="flex items-center">
+                    <svg className="w-4 h-4 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-green-700">Card frame guide</span>
+                  </div>
+                  <div className="flex items-center">
+                    <svg className="w-4 h-4 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-green-700">Switch cameras</span>
+                  </div>
+                  <div className="flex items-center">
+                    <svg className="w-4 h-4 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-green-700">High quality capture</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </main>
+
+      {/* Camera Capture Modal */}
+      {showCamera && (
+        <CameraCapture
+          onCapture={handleCameraCapture}
+          onClose={() => setShowCamera(false)}
+          isBackImage={cameraMode === 'back'}
+        />
+      )}
+
+      {/* Floating Action Button for Quick Camera Access */}
+      <div className="fixed bottom-6 right-6 z-40 md:hidden">
+        <button
+          onClick={() => openCamera('front')}
+          className="flex items-center justify-center w-14 h-14 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-110"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
+      </div>
     </div>
   )
 }

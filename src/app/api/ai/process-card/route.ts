@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
 import { createClient } from '@supabase/supabase-js'
 import { preprocessImage } from '@/lib/image-processing'
 import { smartOCR } from '@/lib/ocr'

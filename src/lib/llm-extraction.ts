@@ -134,7 +134,7 @@ Do not include any explanatory text before or after the JSON.`
         ...extractedData,
         raw_ocr_text: ocrText
       }
-    } catch (parseError) {
+    } catch {
       console.error('Failed to parse LLM response:', content)
       throw new Error('Invalid JSON response from LLM')
     }
@@ -150,7 +150,7 @@ Do not include any explanatory text before or after the JSON.`
  */
 export async function extractCardDataWithClaude(
   ocrText: string,
-  options: LLMExtractionOptions = {}
+  _options: LLMExtractionOptions = {}
 ): Promise<CardExtractionResult> {
   // Check if Anthropic API key is configured
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -304,49 +304,6 @@ export async function smartCardExtraction(
   }
 }
 
-function createMockExtraction(ocrText: string): CardExtractionResult {
-  // Create reasonable mock data based on OCR text patterns
-  const lines = ocrText.split('\n').map(line => line.trim()).filter(Boolean)
-  
-  return {
-    year: "2023",
-    player_name: lines.find(line => /^[A-Z][a-z]+ [A-Z][a-z]+/.test(line)) || "Unknown Player",
-    team_name: lines.find(line => line.toLowerCase().includes('hawks') || line.toLowerCase().includes('yankees')) || "Unknown Team",
-    position: lines.find(line => /^(CENTER|PITCHER|FORWARD|GUARD)$/i.test(line)) || "Unknown",
-    sport: detectSport(ocrText),
-    set_name: lines.find(line => line.includes('SERIES') || line.includes('COLLECTION')) || "Unknown Set",
-    card_brand: lines.find(line => /^(UPPER DECK|PANINI|TOPPS|FLEER)$/i.test(line)) || "Unknown Brand",
-    card_number: lines.find(line => /^#?\d+/.test(line)) || "Unknown",
-    attributes: {
-      rookie: ocrText.toLowerCase().includes('rc') || ocrText.toLowerCase().includes('rookie'),
-      autographed: ocrText.toLowerCase().includes('auto') || ocrText.toLowerCase().includes('signature'),
-      patch: ocrText.toLowerCase().includes('patch') || ocrText.toLowerCase().includes('jersey') || 
-             ocrText.toLowerCase().includes('game-used') || ocrText.toLowerCase().includes('material') ||
-             ocrText.toLowerCase().includes('fabric') || ocrText.toLowerCase().includes('swatch') ||
-             ocrText.toLowerCase().includes('relic') || ocrText.toLowerCase().includes('ticket') ||
-             ocrText.toLowerCase().includes('contenders') || ocrText.toLowerCase().includes('prizm') ||
-             ocrText.toLowerCase().includes('select') || ocrText.toLowerCase().includes('flawless')
-    },
-    confidence: 0.6,
-    raw_ocr_text: ocrText
-  }
-}
+// Removed unused function
 
-function detectSport(text: string): string {
-  const lowerText = text.toLowerCase()
-  
-  if (lowerText.includes('hockey') || lowerText.includes('blackhawks') || lowerText.includes('center')) {
-    return 'Hockey'
-  }
-  if (lowerText.includes('baseball') || lowerText.includes('yankees') || lowerText.includes('pitcher')) {
-    return 'Baseball'
-  }
-  if (lowerText.includes('basketball') || lowerText.includes('lakers') || lowerText.includes('guard')) {
-    return 'Basketball'
-  }
-  if (lowerText.includes('football') || lowerText.includes('patriots') || lowerText.includes('quarterback')) {
-    return 'Football'
-  }
-  
-  return 'Unknown'
-}
+// Removed unused function
