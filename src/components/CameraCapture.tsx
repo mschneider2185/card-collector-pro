@@ -16,40 +16,37 @@ export default function CameraCapture({ onCapture, onClose, isBackImage = false 
   const [error, setError] = useState<string | null>(null)
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment')
 
-  const startCamera = useCallback(async () => {
-    try {
-      setError(null)
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: facingMode,
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      })
-      
-      setStream(mediaStream)
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream
-      }
-    } catch (err) {
-      console.error('Error accessing camera:', err)
-      setError('Unable to access camera. Please check permissions and try again.')
-    }
-  }, [facingMode])
-
-  const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop())
-      setStream(null)
-    }
-  }, [stream])
-
   useEffect(() => {
-    startCamera()
-    return () => {
-      stopCamera()
+    const startCamera = async () => {
+      try {
+        setError(null)
+        const mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: facingMode,
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          }
+        })
+        
+        setStream(mediaStream)
+        if (videoRef.current) {
+          videoRef.current.srcObject = mediaStream
+        }
+      } catch (err) {
+        console.error('Error accessing camera:', err)
+        setError('Unable to access camera. Please check permissions and try again.')
+      }
     }
-  }, [startCamera, stopCamera])
+
+    startCamera()
+    
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop())
+        setStream(null)
+      }
+    }
+  }, [facingMode]) // Only depend on facingMode
 
   const capturePhoto = () => {
     if (!videoRef.current || !canvasRef.current) return
@@ -125,12 +122,12 @@ export default function CameraCapture({ onCapture, onClose, isBackImage = false 
               </svg>
               <p className="text-lg font-semibold mb-2">Camera Error</p>
               <p className="text-gray-300 mb-4">{error}</p>
-              <button
-                onClick={startCamera}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Try Again
-              </button>
+                             <button
+                 onClick={() => window.location.reload()}
+                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+               >
+                 Try Again
+               </button>
             </div>
           </div>
         ) : (
