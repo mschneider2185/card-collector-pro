@@ -2,20 +2,21 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Card } from '@/types'
+import { Card, UserCard } from '@/types'
 import { User } from '@supabase/supabase-js'
 import Link from 'next/link'
 import Image from 'next/image'
 
 interface CardModalProps {
-  card: Card
+  userCard: UserCard
   onClose: () => void
   onAddToCollection: (cardId: string) => void
   user: User | null
 }
 
-function CardModal({ card, onClose, onAddToCollection, user }: CardModalProps) {
+function CardModal({ userCard, onClose, onAddToCollection, user }: CardModalProps) {
   const [showBack, setShowBack] = useState(false)
+  const card = userCard.card
   
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
@@ -24,7 +25,7 @@ function CardModal({ card, onClose, onAddToCollection, user }: CardModalProps) {
           {/* Header */}
           <div className="flex justify-between items-start mb-6">
             <h2 className="text-2xl font-bold text-gray-900">
-              {card.player_name || 'Unknown Player'}
+              {card?.player_name || 'Unknown Player'}
             </h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -163,9 +164,48 @@ function CardModal({ card, onClose, onAddToCollection, user }: CardModalProps) {
                 </div>
               </div>
               
+              {/* Collection-specific information */}
+              <div className="border-t pt-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Owner Quantity</label>
+                    <div className="text-lg font-semibold">{userCard.quantity}</div>
+                  </div>
+                  
+                  {userCard.condition && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Condition</label>
+                      <div className="text-lg font-semibold">{userCard.condition}</div>
+                    </div>
+                  )}
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Trade Status</label>
+                    <div className="flex items-center">
+                      {userCard.is_for_trade ? (
+                        <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
+                          Available for Trade
+                        </span>
+                      ) : (
+                        <span className="bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm font-medium">
+                          Not for Trade
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                {userCard.acquired_at && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date Acquired</label>
+                    <div className="text-lg font-semibold">{new Date(userCard.acquired_at).toLocaleDateString()}</div>
+                  </div>
+                )}
+              </div>
+
               {/* Actions */}
               <div className="flex justify-end space-x-3 border-t pt-4">
-                {user ? (
+                {user && card ? (
                   <button
                     onClick={() => {
                       onAddToCollection(card.id)
@@ -195,40 +235,67 @@ function CardModal({ card, onClose, onAddToCollection, user }: CardModalProps) {
 
 export default function CardsPage() {
   const [user, setUser] = useState<User | null>(null)
-  const [cards, setCards] = useState<Card[]>([])
+  const [userCards, setUserCards] = useState<UserCard[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterSport, setFilterSport] = useState('')
   const [filterYear, setFilterYear] = useState('')
-  const [selectedCard, setSelectedCard] = useState<Card | null>(null)
+  const [selectedCard, setSelectedCard] = useState<UserCard | null>(null)
 
   const fetchCards = useCallback(async () => {
     let query = supabase
-      .from('cards')
-      .select('*')
+      .from('user_cards')
+      .select(`
+        *,
+        card:cards(*)
+      `)
       .order('created_at', { ascending: false })
       .limit(100)
 
-    if (searchTerm) {
-      query = query.or(`player_name.ilike.%${searchTerm}%,brand.ilike.%${searchTerm}%,series.ilike.%${searchTerm}%`)
-    }
+    // Filter by card properties using the joined table
+    if (searchTerm || filterSport || filterYear) {
+      // Get matching cards first
+      let cardQuery = supabase
+        .from('cards')
+        .select('id')
 
-    if (filterSport) {
-      query = query.eq('sport', filterSport)
-    }
+      if (searchTerm) {
+        cardQuery = cardQuery.or(`player_name.ilike.%${searchTerm}%,brand.ilike.%${searchTerm}%,series.ilike.%${searchTerm}%`)
+      }
 
-    if (filterYear) {
-      query = query.eq('year', parseInt(filterYear))
+      if (filterSport) {
+        cardQuery = cardQuery.eq('sport', filterSport)
+      }
+
+      if (filterYear) {
+        cardQuery = cardQuery.eq('year', parseInt(filterYear))
+      }
+
+      const { data: cardIds, error: cardError } = await cardQuery
+
+      if (cardError) {
+        console.error('Error fetching card IDs:', cardError)
+        return
+      }
+
+      if (cardIds && cardIds.length > 0) {
+        const ids = cardIds.map(card => card.id)
+        query = query.in('card_id', ids)
+      } else {
+        // No matching cards found
+        setUserCards([])
+        return
+      }
     }
 
     const { data, error } = await query
 
     if (error) {
-      console.error('Error fetching cards:', error)
+      console.error('Error fetching user cards:', error)
       return
     }
 
-    setCards(data || [])
+    setUserCards(data || [])
   }, [searchTerm, filterSport, filterYear])
 
   useEffect(() => {
@@ -253,6 +320,19 @@ export default function CardsPage() {
   const addToCollection = async (cardId: string) => {
     if (!user) {
       alert('Please sign in to add cards to your collection')
+      return
+    }
+
+    // Check if user already has this card
+    const { data: existingCard } = await supabase
+      .from('user_cards')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('card_id', cardId)
+      .single()
+
+    if (existingCard) {
+      alert('You already have this card in your collection!')
       return
     }
 
@@ -306,7 +386,7 @@ export default function CardsPage() {
             </div>
             <div className="flex items-center space-x-3">
               <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium">
-                {cards.length} cards
+                {userCards.length} cards
               </div>
             </div>
           </div>
@@ -357,7 +437,7 @@ export default function CardsPage() {
         </div>
 
         {/* Results */}
-        {cards.length === 0 ? (
+        {userCards.length === 0 ? (
           <div className="text-center py-16">
             <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -371,17 +451,17 @@ export default function CardsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            {cards.map((card) => (
+            {userCards.map((userCard) => (
               <div 
-                key={card.id} 
+                key={userCard.id} 
                 className="group bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-white/20 overflow-hidden cursor-pointer"
-                onClick={() => setSelectedCard(card)}
+                onClick={() => setSelectedCard(userCard)}
               >
-                {card.image_url || (card as any)?.front_image_url ? (
+                {userCard.card?.image_url || (userCard.card as any)?.front_image_url ? (
                   <div className="relative aspect-[2.5/3.5] overflow-hidden">
                     <Image 
-                      src={(card as any).front_image_url || card.image_url || ''} 
-                      alt={`${card.player_name || 'Unknown'} card`}
+                      src={(userCard.card as any)?.front_image_url || userCard.card?.image_url || ''} 
+                      alt={`${userCard.card?.player_name || 'Unknown'} card`}
                       fill
                       className="object-contain group-hover:scale-105 transition-transform duration-300 bg-gray-50"
                     />
@@ -396,22 +476,49 @@ export default function CardsPage() {
                 
                 <div className="p-4">
                   <h3 className="font-bold text-sm mb-2 text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2">
-                    {card.player_name || 'Unknown Player'}
+                    {userCard.card?.player_name || 'Unknown Player'}
                   </h3>
                   
                   <div className="space-y-1 text-xs text-gray-600">
-                    {card.year && <div>{card.year}</div>}
-                    {card.brand && <div>{card.brand}</div>}
-                    {card.card_number && <div>#{card.card_number}</div>}
-                    {card.sport && <div className="capitalize">{card.sport}</div>}
+                    {userCard.card?.year && <div>{userCard.card.year}</div>}
+                    {userCard.card?.brand && <div>{userCard.card.brand}</div>}
+                    {userCard.card?.card_number && <div>#{userCard.card.card_number}</div>}
+                    {userCard.card?.sport && <div className="capitalize">{userCard.card.sport}</div>}
                   </div>
                   
-                  <div className="mt-3">
-                    {(card as any)?.rookie && (
-                      <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full text-xs font-medium">
-                        RC
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
+                        Qty: {userCard.quantity}
                       </span>
-                    )}
+                      {userCard.is_for_trade && (
+                        <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                          Trade
+                        </span>
+                      )}
+                      {userCard.condition && (
+                        <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                          {userCard.condition}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {(userCard.card as any)?.rookie && (
+                        <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full text-xs font-medium">
+                          RC
+                        </span>
+                      )}
+                      {(userCard.card as any)?.autographed && (
+                        <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs font-medium">
+                          Auto
+                        </span>
+                      )}
+                      {(userCard.card as any)?.patch && (
+                        <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                          Patch
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -423,7 +530,7 @@ export default function CardsPage() {
       {/* Modal */}
       {selectedCard && (
         <CardModal 
-          card={selectedCard} 
+          userCard={selectedCard} 
           onClose={() => setSelectedCard(null)}
           onAddToCollection={addToCollection}
           user={user}

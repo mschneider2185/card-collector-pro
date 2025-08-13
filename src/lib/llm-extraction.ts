@@ -50,7 +50,7 @@ IMPORTANT: Return ONLY a valid JSON object with these exact fields (omit fields 
   "attributes": {
     "rookie": boolean (true if RC, ROOKIE, or rookie year indicators present),
     "autographed": boolean (true if AUTO, AUTOGRAPH, signature present),
-    "patch": boolean (true if PATCH, JERSEY, fabric swatch present)
+    "patch": boolean (true if PATCH, JERSEY, fabric swatch, game-used, or material present)
   },
   "confidence": 0.0-1.0 (number, your confidence in the extraction)
 }
@@ -62,7 +62,7 @@ Recognition guidelines:
 - Years: Look for season years like "2023-24" (use "2023")
 - Rookie cards: Look for "RC", "ROOKIE", or first-year indicators
 - Autographs: Look for "AUTO", "AUTOGRAPH", signature mentions
-- Patches: Look for "PATCH", "JERSEY", "GAME-USED" mentions
+- Patches: Look for "PATCH", "JERSEY", "GAME-USED", "MATERIAL", "FABRIC", "SWATCH", "RELIC", "TICKET" (especially "Rookie Ticket" cards often have patches), or any mention of embedded materials
 
 CRITICAL: CARD NUMBER vs PLAYER JERSEY NUMBER:
 - "card_number": This is the CARD'S number in the set (e.g., "#25", "Card 152"). Usually found on the back of the card, often in a corner or near set information.
@@ -83,6 +83,20 @@ Use back information to fill in missing details from the front, especially:
 - Complete card numbers from the set numbering system (e.g., "#25" if that's what appears on the back)
 - Player positions and teams (if unclear from front)
 - Year information from copyright or season stats
+
+PATCH DETECTION: Be especially attentive to patch detection. Look for:
+- Explicit mentions: "PATCH", "JERSEY", "GAME-USED", "MATERIAL", "FABRIC", "SWATCH", "RELIC"
+- Card types that typically include patches: "Rookie Ticket", "Contenders", "Prizm", "Select", "Flawless"
+- Set names that suggest premium materials: "Contenders", "Prizm", "Select", "Flawless", "National Treasures"
+- Any mention of embedded materials, textures, or game-worn items
+- Cards with "Ticket" in the name often have patches or materials embedded
+
+SPECIAL PATCH DETECTION RULES:
+- If the card is a "Rookie Ticket" (any card with "TICKET" in the name), it likely has a patch
+- If the card is from "Contenders" series, it likely has a patch
+- If the card has a jersey number that matches the card number or appears in a special format, it might indicate a patch
+- Look for any mention of "SEC", "ROW", "SEAT" (ticket stub format) which often indicates a patch card
+- If the card mentions "GRIZZLIES" or team names in a ticket format, it's likely a patch card
 
 ${includeReasoningSteps ? 'Include a brief reasoning for each extracted field.' : ''}
 
@@ -192,6 +206,79 @@ export function validateCardData(data: CardExtractionResult): {
 }
 
 /**
+ * Post-process extracted data to improve patch detection
+ */
+function postProcessPatchDetection(data: CardExtractionResult, ocrText: string): CardExtractionResult {
+  const lowerOcrText = ocrText.toLowerCase()
+  const lowerSetName = data.set_name?.toLowerCase() || ''
+  const lowerBrand = data.card_brand?.toLowerCase() || ''
+  
+  // If patch is already detected, don't change it
+  if (data.attributes?.patch) {
+    return data
+  }
+  
+  // Enhanced patch detection logic
+  const patchIndicators = [
+    // Card types that typically have patches
+    lowerOcrText.includes('ticket'),
+    lowerOcrText.includes('contenders'),
+    lowerOcrText.includes('prizm'),
+    lowerOcrText.includes('select'),
+    lowerOcrText.includes('flawless'),
+    lowerOcrText.includes('national treasures'),
+    
+    // Set names that suggest patches
+    lowerSetName.includes('ticket'),
+    lowerSetName.includes('contenders'),
+    lowerSetName.includes('prizm'),
+    lowerSetName.includes('select'),
+    lowerSetName.includes('flawless'),
+    lowerSetName.includes('national treasures'),
+    
+    // Brand names that often have patches
+    lowerBrand.includes('panini'),
+    
+    // Ticket stub format indicators
+    lowerOcrText.includes('sec'),
+    lowerOcrText.includes('row'),
+    lowerOcrText.includes('seat'),
+    
+    // Team names in ticket context
+    lowerOcrText.includes('grizzlies') && lowerOcrText.includes('ticket'),
+    
+    // Material indicators
+    lowerOcrText.includes('material'),
+    lowerOcrText.includes('fabric'),
+    lowerOcrText.includes('swatch'),
+    lowerOcrText.includes('relic'),
+    lowerOcrText.includes('game-used'),
+    lowerOcrText.includes('jersey')
+  ]
+  
+  const hasPatchIndicator = patchIndicators.some(indicator => indicator)
+  
+  if (hasPatchIndicator) {
+    console.log('Post-processing detected patch indicators:', {
+      ocrText: ocrText.substring(0, 200) + '...',
+      set_name: data.set_name,
+      brand: data.card_brand,
+      indicators: patchIndicators.filter(Boolean)
+    })
+    
+    return {
+      ...data,
+      attributes: {
+        ...data.attributes,
+        patch: true
+      }
+    }
+  }
+  
+  return data
+}
+
+/**
  * Smart extraction that combines multiple approaches
  */
 export async function smartCardExtraction(
@@ -202,8 +289,11 @@ export async function smartCardExtraction(
     const extracted = await extractCardDataWithOpenAI(ocrText, options)
     const validation = validateCardData(extracted)
     
+    // Apply post-processing to improve patch detection
+    const postProcessed = postProcessPatchDetection(extracted, ocrText)
+    
     return {
-      ...extracted,
+      ...postProcessed,
       validation
     }
   } catch (error) {
@@ -230,7 +320,12 @@ function createMockExtraction(ocrText: string): CardExtractionResult {
     attributes: {
       rookie: ocrText.toLowerCase().includes('rc') || ocrText.toLowerCase().includes('rookie'),
       autographed: ocrText.toLowerCase().includes('auto') || ocrText.toLowerCase().includes('signature'),
-      patch: ocrText.toLowerCase().includes('patch') || ocrText.toLowerCase().includes('jersey')
+      patch: ocrText.toLowerCase().includes('patch') || ocrText.toLowerCase().includes('jersey') || 
+             ocrText.toLowerCase().includes('game-used') || ocrText.toLowerCase().includes('material') ||
+             ocrText.toLowerCase().includes('fabric') || ocrText.toLowerCase().includes('swatch') ||
+             ocrText.toLowerCase().includes('relic') || ocrText.toLowerCase().includes('ticket') ||
+             ocrText.toLowerCase().includes('contenders') || ocrText.toLowerCase().includes('prizm') ||
+             ocrText.toLowerCase().includes('select') || ocrText.toLowerCase().includes('flawless')
     },
     confidence: 0.6,
     raw_ocr_text: ocrText

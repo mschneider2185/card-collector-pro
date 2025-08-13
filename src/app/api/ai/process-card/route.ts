@@ -150,6 +150,9 @@ ROOKIE`,
           ? `FRONT OF CARD:\n${ocrResult.text}\n\nBACK OF CARD:\n${backOcrResult.text}`
           : ocrResult.text
           
+        // Debug: Log the OCR text for troubleshooting
+        console.log('Combined OCR text for AI processing:', combinedOcrText)
+        
         extractedData = await smartCardExtraction(combinedOcrText, {
           includeReasoningSteps: true
         })
