@@ -1,42 +1,42 @@
 # Card Collector Pro
 
-A modern trading card collection management platform built with Next.js, TypeScript, Tailwind CSS, and Supabase.
+A sophisticated trading card collection management platform built with Next.js 15, TypeScript, Tailwind CSS, and Supabase. Features comprehensive AI-powered card recognition, mobile camera integration, and professional collection management tools.
 
 ## Features
 
-### ✅ Implemented (Phase 1 MVP)
-- **User Authentication**: Email/password and Google OAuth through Supabase Auth
-- **Card Upload System**: Upload photos of card fronts and backs
-- **AI-Powered Card Recognition**: Automatic card data extraction using OCR and LLM processing
-- **Personal Collection Management**: View, organize, and manage your card collection
-- **Card Database**: Browse and search through the master card database
-- **Responsive Design**: Fully responsive UI with modern glassmorphism design
-- **Card Attributes**: Support for rookie cards, autographs, patches, condition tracking
+### ✅ Production-Ready Implementation
+- **Multi-Provider Authentication**: Email/password and Google OAuth with automatic user profile creation
+- **Mobile Camera Integration**: Native camera access with card frame guides and high-quality capture
+- **Advanced AI Processing**: OCR text extraction + LLM data structuring with confidence scoring
+- **Professional Collection Management**: Full CRUD operations with inline editing and trade status tracking
+- **Comprehensive Card Database**: Advanced search, filtering, and discovery with real-time results
+- **Dual Image Support**: Front and back card image upload with side-by-side viewing
+- **Special Card Detection**: Automatic recognition of rookie cards, autographs, and patches
+- **Modern UI/UX**: Glassmorphism design with responsive layouts and professional animations
 
-### 🔧 Current Status
-The application is fully functional with a complete Phase 1 MVP implementation including:
-- Beautiful, modern UI with gradient backgrounds and glass-morphism effects
-- Full CRUD operations for user collections
-- Advanced image processing pipeline with OCR and AI extraction
-- Comprehensive card database with search and filtering
-- Secure file storage and user authentication
+### 🚀 Recent Enhancements
+- **Mobile-First Camera Interface**: Full-screen camera with device switching and capture guides
+- **Enhanced AI Processing**: Improved patch detection and special attribute recognition
+- **Collection Management**: Inline editing, condition tracking, and acquisition date management
+- **Professional Error Handling**: User-friendly messages with graceful fallbacks
 
 ## Tech Stack
 
-- **Frontend**: Next.js 15, React 19, TypeScript
-- **Styling**: Tailwind CSS with custom gradient designs
-- **Backend**: Supabase (Auth, Database, Storage)
-- **Database**: PostgreSQL with Row-Level Security
-- **AI/ML**: OpenAI GPT for card data extraction, Google Vision for OCR
-- **Image Processing**: Custom preprocessing pipeline
+- **Frontend**: Next.js 15 with App Router, React 19, TypeScript
+- **Styling**: Tailwind CSS with glassmorphism design system
+- **Backend**: Supabase (Auth, Database, Storage) with Row-Level Security
+- **Database**: PostgreSQL with optimized schema and proper relationships
+- **AI/ML**: OpenAI GPT-4o-mini for LLM extraction, Google Cloud Vision for OCR
+- **Image Processing**: Canvas-based preprocessing with quality optimization
+- **Mobile**: Native camera API integration with device switching
 
 ## Getting Started
 
 ### Prerequisites
 - Node.js 18+
 - Supabase account and project
-- OpenAI API key (optional, for AI features)
-- Google Cloud Vision API key (optional, for enhanced OCR)
+- OpenAI API key (optional, for real AI processing - graceful fallbacks included)
+- Google Cloud Vision API key (optional, for enhanced OCR accuracy)
 
 ### Installation
 
@@ -53,9 +53,12 @@ npm install
 3. Set up environment variables:
 Create a `.env.local` file with:
 ```env
+# Required for basic functionality
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+# Optional for AI features (app works without these)
 OPENAI_API_KEY=your_openai_api_key
 GOOGLE_CLOUD_VISION_API_KEY=your_google_vision_key
 ```
@@ -69,13 +72,18 @@ npm run dev
 
 ## Database Setup
 
-The application uses Supabase with the following schema:
-- `users` - Extended user profiles
-- `cards` - Master card database
-- `user_cards` - User collection entries
-- `card_uploads` - Upload tracking and AI processing results
+**IMPORTANT**: Run `database_setup.sql` in your Supabase SQL Editor to create all required tables, triggers, and RLS policies.
 
-See `database_schema.md` and the SQL files in the project root for complete schema details.
+The application uses a comprehensive schema:
+- `users` - Extended user profiles with automatic creation triggers
+- `cards` - Master card database with comprehensive metadata
+- `user_cards` - Collection entries with condition tracking and trade status
+- `card_uploads` - AI processing pipeline with confidence scoring
+
+**Storage Buckets** (create in Supabase Dashboard):
+- `card-uploads` (private) - User uploads for processing
+- `card-images` (public) - Verified card images
+- `avatars` (public) - User profile pictures
 
 ## Project Structure
 
@@ -95,35 +103,46 @@ src/
 
 ## Key Features Detail
 
-### Card Upload & AI Processing
-- Drag-and-drop interface for front/back card images
-- Advanced image preprocessing (contrast, sharpening, noise reduction)
-- OCR text extraction from card images
-- LLM-powered structured data extraction
-- Confidence scoring and manual review workflow
-- Automatic card database updates
+### Mobile Camera Integration
+- **Full-screen camera interface** with native device camera access
+- **Front/back camera switching** with professional controls
+- **Card frame overlay** with positioning guides for optimal capture
+- **High-quality image capture** (ideal 1920x1080 resolution)
+- **Mobile-optimized UI** with touch-friendly controls
+- **Real-time error handling** with informative user feedback
 
-### Collection Management
-- Personal card inventory with quantities and conditions
-- Card condition tracking (Mint, Near Mint, etc.)
-- Notes and acquisition date tracking
-- Modal-based detailed card views
-- Remove cards from collection
-- Side-by-side front/back image display
+### Advanced AI Processing Pipeline
+- **Dual image processing** for front and back of cards
+- **Image preprocessing** with canvas-based enhancement (contrast, sharpening, noise reduction)
+- **OCR text extraction** using Google Cloud Vision with word-level accuracy
+- **LLM data structuring** with OpenAI GPT-4o-mini and expert prompts
+- **Special attribute detection** for rookie cards, autographs, and patches
+- **Confidence scoring** and validation with manual review workflow
+- **Graceful fallbacks** when AI services aren't configured
 
-### Card Database
-- Search by player name, brand, or series
-- Filter by sport and year
-- Grid-based card display with hover effects
-- Add cards from database to personal collection
-- Comprehensive card details with attributes
+### Professional Collection Management
+- **Responsive grid layout** with professional card display
+- **Inline editing** with save/cancel functionality
+- **Comprehensive tracking** - condition, quantity, trade status, notes
+- **Side-by-side viewing** of front/back images in modals
+- **Real-time updates** with optimistic UI patterns
+- **Professional empty states** with actionable guidance
 
-### Authentication
-- Supabase Auth integration
-- Email/password and Google OAuth
-- Automatic user profile creation
-- Secure session management
-- Protected routes for authenticated features
+### Sophisticated Card Database
+- **Advanced search** across player names, brands, and series with debounced queries
+- **Multi-filter system** for sport, year, and special attributes
+- **Real-time results** with efficient database operations
+- **Professional card grid** with hover effects and loading states
+- **One-click collection addition** with duplicate prevention
+- **Comprehensive modal views** with full card information
+
+### Enterprise-Grade Authentication
+- **Multi-provider support** - Email/password and Google OAuth
+- **Automatic user provisioning** with database triggers and fallbacks
+- **Real-time auth state** management with session persistence
+- **Modal-based UI** with portal rendering and proper z-index management
+- **Protected routes** with comprehensive access control
+- **OAuth callback handling** with proper redirect management
 
 ## Development Commands
 
