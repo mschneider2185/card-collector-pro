@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Card, UserCard, CardWithTradeInfo } from '@/types'
+import { CardWithTradeInfo } from '@/types'
 import { User } from '@supabase/supabase-js'
 import Image from 'next/image'
 
@@ -203,7 +203,6 @@ function CardModal({ card, onClose, onAddToCollection, user }: CardModalProps) {
 }
 
 interface CardsClientProps {
-  cards: Card[]
   searchParams: {
     q?: string
     sport?: string
@@ -214,7 +213,7 @@ interface CardsClientProps {
   }
 }
 
-export default function CardsClient({ cards: initialCards, searchParams }: CardsClientProps) {
+export default function CardsClient({ searchParams }: CardsClientProps) {
   const [user, setUser] = useState<User | null>(null)
   const [selectedCard, setSelectedCard] = useState<CardWithTradeInfo | null>(null)
   const [cards, setCards] = useState<CardWithTradeInfo[]>([])
