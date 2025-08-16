@@ -164,43 +164,16 @@ function CardModal({ userCard, onClose, onAddToCollection, user }: CardModalProp
                 </div>
               </div>
               
-              {/* Collection-specific information */}
+              {/* Card availability information */}
               <div className="border-t pt-4 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Owner Quantity</label>
-                    <div className="text-lg font-semibold">{userCard.quantity}</div>
-                  </div>
-                  
-                  {userCard.condition && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Condition</label>
-                      <div className="text-lg font-semibold">{userCard.condition}</div>
-                    </div>
-                  )}
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Trade Status</label>
-                    <div className="flex items-center">
-                      {userCard.is_for_trade ? (
-                        <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
-                          Available for Trade
-                        </span>
-                      ) : (
-                        <span className="bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm font-medium">
-                          Not for Trade
-                        </span>
-                      )}
-                    </div>
+                <div className="text-center">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h3 className="text-lg font-semibold text-blue-900 mb-2">Add to Your Collection</h3>
+                    <p className="text-blue-700 text-sm">
+                      This card is available in our database. Click the button below to add it to your personal collection.
+                    </p>
                   </div>
                 </div>
-                
-                {userCard.acquired_at && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Date Acquired</label>
-                    <div className="text-lg font-semibold">{new Date(userCard.acquired_at).toLocaleDateString()}</div>
-                  </div>
-                )}
               </div>
 
               {/* Actions */}
@@ -243,60 +216,49 @@ export default function CardsPage() {
   const [selectedCard, setSelectedCard] = useState<UserCard | null>(null)
 
   const fetchCards = useCallback(async () => {
+    // Query the master cards table instead of user_cards
     let query = supabase
-      .from('user_cards')
-      .select(`
-        *,
-        card:cards(*)
-      `)
+      .from('cards')
+      .select('*')
       .order('created_at', { ascending: false })
       .limit(100)
 
-    // Filter by card properties using the joined table
-    if (searchTerm || filterSport || filterYear) {
-      // Get matching cards first
-      let cardQuery = supabase
-        .from('cards')
-        .select('id')
-
-      if (searchTerm) {
-        cardQuery = cardQuery.or(`player_name.ilike.%${searchTerm}%,brand.ilike.%${searchTerm}%,series.ilike.%${searchTerm}%`)
-      }
-
-      if (filterSport) {
-        cardQuery = cardQuery.eq('sport', filterSport)
-      }
-
-      if (filterYear) {
-        cardQuery = cardQuery.eq('year', parseInt(filterYear))
-      }
-
-      const { data: cardIds, error: cardError } = await cardQuery
-
-      if (cardError) {
-        console.error('Error fetching card IDs:', cardError)
-        return
-      }
-
-      if (cardIds && cardIds.length > 0) {
-        const ids = cardIds.map(card => card.id)
-        query = query.in('card_id', ids)
-      } else {
-        // No matching cards found
-        setUserCards([])
-        return
-      }
+    // Apply filters directly to the cards table
+    if (searchTerm) {
+      query = query.or(`player_name.ilike.%${searchTerm}%,brand.ilike.%${searchTerm}%,series.ilike.%${searchTerm}%`)
     }
 
-    const { data, error } = await query
+    if (filterSport) {
+      query = query.eq('sport', filterSport)
+    }
+
+    if (filterYear) {
+      query = query.eq('year', parseInt(filterYear))
+    }
+
+    const { data: cards, error } = await query
 
     if (error) {
-      console.error('Error fetching user cards:', error)
+      console.error('Error fetching cards:', error)
       return
     }
 
-    setUserCards(data || [])
-  }, [searchTerm, filterSport, filterYear])
+    // Transform the data to match the UserCard interface structure
+    const transformedCards = (cards || []).map(card => ({
+      id: card.id,
+      user_id: user?.id || '',
+      card_id: card.id,
+      quantity: 0, // Default quantity for browsing
+      condition: null,
+      is_for_trade: false,
+      notes: null,
+      acquired_at: null,
+      created_at: card.created_at,
+      card: card // The actual card data
+    }))
+
+    setUserCards(transformedCards)
+  }, [searchTerm, filterSport, filterYear, user?.id])
 
   useEffect(() => {
     const getUser = async () => {
@@ -488,19 +450,9 @@ export default function CardsPage() {
                   
                   <div className="mt-3 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
-                        Qty: {userCard.quantity}
+                      <span className="bg-gray-100 text-gray-800 px-2 py-1 rounded-full text-xs font-medium">
+                        Available
                       </span>
-                      {userCard.is_for_trade && (
-                        <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
-                          Trade
-                        </span>
-                      )}
-                      {userCard.condition && (
-                        <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
-                          {userCard.condition}
-                        </span>
-                      )}
                     </div>
                     <div className="flex flex-wrap gap-1">
                       {userCard.card?.rookie && (
