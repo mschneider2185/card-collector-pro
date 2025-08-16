@@ -1,5 +1,3 @@
-import { supabase } from '@/lib/supabase'
-import { UserCard } from '@/types'
 import Link from 'next/link'
 import CollectionFilters from './CollectionFilters'
 import CollectionClient from './CollectionClient'
@@ -11,7 +9,7 @@ interface SearchParams {
   trade?: string
 }
 
-async function getUserCards(searchParams: SearchParams) {
+async function getUserCards() {
   // For server-side rendering, we'll return empty data and let the client handle auth
   // This prevents hydration issues and ensures proper authentication flow
   return { userCards: [], user: null, needsClientAuth: true }
@@ -20,9 +18,10 @@ async function getUserCards(searchParams: SearchParams) {
 export default async function CollectionPage({
   searchParams,
 }: {
-  searchParams: SearchParams
+  searchParams: Promise<SearchParams>
 }) {
-  const { userCards, user, needsClientAuth } = await getUserCards(searchParams)
+  const { userCards, user, needsClientAuth } = await getUserCards()
+  const resolvedSearchParams = await searchParams
   
   const sports = ['baseball', 'basketball', 'football', 'hockey', 'pokemon', 'soccer']
   const years = Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i)
@@ -74,7 +73,7 @@ export default async function CollectionPage({
         <CollectionFilters sports={sports} years={years} />
 
         {/* Results */}
-        <CollectionClient userCards={userCards} searchParams={searchParams} />
+        <CollectionClient userCards={userCards} searchParams={resolvedSearchParams} />
       </main>
     </div>
   )
