@@ -44,6 +44,15 @@ export interface UserCard {
   created_at: string
 }
 
+export interface CardWithTradeInfo extends Card {
+  user_cards: Array<{
+    id: string
+    user_id: string
+    is_for_trade: boolean
+    quantity: number
+  }>
+}
+
 export interface User {
   id: string
   username: string | null
