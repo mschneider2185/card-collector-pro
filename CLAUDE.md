@@ -33,7 +33,6 @@ The route streams SSE events so the client sees live step updates instead of a s
 
 ## Key Files
 - src/app/api/ai/process-card/route.ts — AI processing Edge route (SSE streaming)
-- src/app/api/ai/process-card/[uploadId]/route.ts — Status polling endpoint (kept for reference)
 - src/app/upload/page.tsx — upload UI; reads SSE stream for live status; passes signed URLs to API
 - src/app/auth/callback/route.ts — OAuth callback (uses @supabase/ssr, sets cookies on response)
 - src/lib/llm-extraction.ts — GPT-4o Vision extraction (smartCardVisionExtraction + verifyCardMatch)
