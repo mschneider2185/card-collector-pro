@@ -26,37 +26,13 @@ function toDataUrl(buffer: ArrayBuffer, mime: string): string {
   return `data:${mime};base64,${arrayBufferToBase64(buffer)}`
 }
 
-// Create a signed URL for a private storage object, then fetch its content
-async function storageDownload(
-  supabaseUrl: string,
-  serviceRoleKey: string,
-  bucket: string,
-  path: string
-): Promise<{ buffer: ArrayBuffer; mime: string }> {
-  // Step 1: sign the URL via Supabase Storage REST API
-  const signRes = await fetch(`${supabaseUrl}/storage/v1/object/sign/${bucket}/${path}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      apikey: serviceRoleKey,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ expiresIn: 600 })
-  })
-  if (!signRes.ok) {
-    throw new Error(`Failed to sign URL for ${path}: ${signRes.status} ${signRes.statusText}`)
-  }
-  const { signedURL } = await signRes.json() as { signedURL: string }
-  const resolvedUrl = signedURL.startsWith('http') ? signedURL : `${supabaseUrl}${signedURL}`
-
-  // Step 2: fetch the file content using the signed URL (no auth headers needed)
-  const fileRes = await fetch(resolvedUrl)
-  if (!fileRes.ok) {
-    throw new Error(`Failed to fetch signed URL for ${path}: ${fileRes.status}`)
-  }
+// Fetch an image from a pre-signed URL (no auth needed — token is in the URL)
+async function fetchSignedUrl(signedUrl: string, fallbackMime: string): Promise<{ buffer: ArrayBuffer; mime: string }> {
+  const res = await fetch(signedUrl)
+  if (!res.ok) throw new Error(`Failed to fetch image: ${res.status} ${res.statusText}`)
   return {
-    buffer: await fileRes.arrayBuffer(),
-    mime: fileRes.headers.get('content-type') || mimeFromPath(path)
+    buffer: await res.arrayBuffer(),
+    mime: res.headers.get('content-type') || fallbackMime
   }
 }
 
@@ -84,7 +60,7 @@ async function storageUpload(
 }
 
 export async function POST(request: NextRequest) {
-  const { uploadId, imagePath, backImagePath } = await request.json()
+  const { uploadId, imagePath, backImagePath, frontSignedUrl, backSignedUrl } = await request.json()
 
   const encoder = new TextEncoder()
 
@@ -112,14 +88,14 @@ export async function POST(request: NextRequest) {
 
         send({ step: 'Downloading images...' })
 
-        const front = await storageDownload(supabaseUrl, serviceRoleKey, 'card-uploads', imagePath)
+        const front = await fetchSignedUrl(frontSignedUrl, mimeFromPath(imagePath))
         const frontDataUrl = toDataUrl(front.buffer, front.mime)
 
         let backDataUrl: string | null = null
         let back: { buffer: ArrayBuffer; mime: string } | null = null
 
-        if (backImagePath) {
-          back = await storageDownload(supabaseUrl, serviceRoleKey, 'card-uploads', backImagePath)
+        if (backImagePath && backSignedUrl) {
+          back = await fetchSignedUrl(backSignedUrl, mimeFromPath(backImagePath))
           backDataUrl = toDataUrl(back.buffer, back.mime)
 
           send({ step: 'Verifying front and back match...' })

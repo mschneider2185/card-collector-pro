@@ -164,7 +164,9 @@ export default function UploadPage() {
         body: JSON.stringify({
           uploadId: uploadRecord.id,
           imagePath: frontImagePath,
-          backImagePath: backImagePath
+          backImagePath: backImagePath,
+          frontSignedUrl: frontPreviewUrl,
+          backSignedUrl: backPreviewUrl
         })
       })
 
