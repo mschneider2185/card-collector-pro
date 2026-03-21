@@ -1,6 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { waitUntil } from '@vercel/functions'
 import { smartCardVisionExtraction, verifyCardMatch } from '@/lib/llm-extraction'
 
 const supabaseServiceRole = createClient(
@@ -215,7 +214,7 @@ export async function POST(request: NextRequest) {
       .eq('id', uploadId)
 
     // Kick off processing in the background — response returns immediately
-    waitUntil(processCardAsync(uploadId, imagePath, backImagePath ?? null))
+    after(processCardAsync(uploadId, imagePath, backImagePath ?? null))
 
     return NextResponse.json({ success: true, uploadId, status: 'processing' })
   } catch (error) {

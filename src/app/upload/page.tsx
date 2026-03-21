@@ -176,7 +176,7 @@ export default function UploadPage() {
         return
       }
 
-      // Poll for completion
+      // Poll Supabase directly for completion status
       const uploadId = uploadRecord.id
       const maxAttempts = 45 // ~90 seconds
       let attempts = 0
@@ -188,18 +188,23 @@ export default function UploadPage() {
         if (attempts === 3) setProcessingStep('Extracting card details...')
         if (attempts === 8) setProcessingStep('Almost done...')
 
-        const statusRes = await fetch(`/api/ai/process-card/${uploadId}`)
-        const statusData = await statusRes.json()
+        const { data: uploadRow } = await supabase
+          .from('card_uploads')
+          .select('status, extracted_data, confidence_score, error_message')
+          .eq('id', uploadId)
+          .single()
 
-        if (statusData.status === 'completed' && statusData.extractedData) {
-          const data = statusData.extractedData
+        if (!uploadRow) continue
+
+        if (uploadRow.status === 'completed' && uploadRow.extracted_data) {
+          const data = uploadRow.extracted_data as CardExtractionResult
           setProcessingResult({
             uploadId,
             imagePath: frontImagePath,
             extractedData: data,
-            confidence: statusData.confidence || data.confidence || 0.5,
+            confidence: uploadRow.confidence_score || data.confidence || 0.5,
             ocrText: data.raw_ocr_text,
-            processingMetadata: statusData.processingMetadata
+            processingMetadata: undefined
           })
           setCardData({
             sport: data.sport || '',
@@ -221,9 +226,9 @@ export default function UploadPage() {
           })
           setShowCardForm(true)
           break
-        } else if (statusData.status === 'failed') {
-          console.error('AI processing failed:', statusData.errorMessage)
-          alert(statusData.errorMessage || 'AI processing failed. You can manually enter card details below.')
+        } else if (uploadRow.status === 'failed') {
+          console.error('AI processing failed:', uploadRow.error_message)
+          alert(uploadRow.error_message || 'AI processing failed. You can manually enter card details below.')
           setShowCardForm(true)
           break
         }

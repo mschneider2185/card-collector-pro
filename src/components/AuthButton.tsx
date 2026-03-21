@@ -22,7 +22,9 @@ export default function AuthButton() {
   useEffect(() => {
     setMounted(true)
     const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+      // getSession reads from local cookie — fast, no network round-trip
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user ?? null
       setUser(user)
       
       // If user is authenticated, fetch their profile
