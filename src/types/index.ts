@@ -1,3 +1,22 @@
+/** Structured output from AI card processing (OCR/vision + extraction). */
+export interface CardExtractionResult {
+  year?: string
+  player_name?: string
+  team_name?: string
+  position?: string
+  sport?: string
+  set_name?: string
+  card_brand?: string
+  card_number?: string
+  attributes?: {
+    rookie?: boolean
+    autographed?: boolean
+    patch?: boolean
+  }
+  confidence?: number
+  raw_ocr_text?: string
+}
+
 export interface Card {
   id: string
   sport: string | null
@@ -85,13 +104,3 @@ export interface UserCardUpdateData {
   acquired_at?: string | null
 }
 
-// Type for Google Vision API annotation
-export interface GoogleVisionAnnotation {
-  description?: string
-  boundingPoly?: {
-    vertices?: Array<{
-      x?: number
-      y?: number
-    }>
-  }
-}

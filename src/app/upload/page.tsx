@@ -7,7 +7,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import CameraCapture from '@/components/CameraCapture'
 
-import { CardExtractionResult } from '@/app/api/ai/process-card/route'
+import type { CardExtractionResult } from '@/types'
 
 interface CardData {
   sport: string
@@ -42,6 +42,8 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false)
   const [uploadedImage, setUploadedImage] = useState<string | null>(null)
   const [uploadedBackImage, setUploadedBackImage] = useState<string | null>(null)
+  const [frontPreviewUrl, setFrontPreviewUrl] = useState<string | null>(null)
+  const [backPreviewUrl, setBackPreviewUrl] = useState<string | null>(null)
   const [showCardForm, setShowCardForm] = useState(false)
   const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null)
   const [processing, setProcessing] = useState(false)
@@ -103,16 +105,18 @@ export default function UploadPage() {
         throw uploadError
       }
 
-      const { data: { publicUrl } } = supabase.storage
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
         .from('card-uploads')
-        .getPublicUrl(fileName)
+        .createSignedUrl(fileName, 3600)
 
-      console.log(`Uploaded ${isBackImage ? 'back' : 'front'} image URL:`, publicUrl)
-      
+      const previewUrl = signedUrlError ? null : signedUrlData?.signedUrl ?? null
+
       if (isBackImage) {
-        setUploadedBackImage(publicUrl)
+        setUploadedBackImage(fileName)
+        setBackPreviewUrl(previewUrl)
       } else {
-        setUploadedImage(publicUrl)
+        setUploadedImage(fileName)
+        setFrontPreviewUrl(previewUrl)
       }
 
     } catch (error) {
@@ -133,13 +137,8 @@ export default function UploadPage() {
     setProcessingResult(null)
 
     try {
-      // Get the front image file name from the URL - extract just the path part after the storage bucket
-      const frontImagePath = uploadedImage.split('/storage/v1/object/public/card-uploads/')[1]?.split('?')[0] || ''
-      let backImagePath = null
-      
-      if (uploadedBackImage) {
-        backImagePath = uploadedBackImage.split('/storage/v1/object/public/card-uploads/')[1]?.split('?')[0] || ''
-      }
+      const frontImagePath = uploadedImage
+      const backImagePath = uploadedBackImage ?? null
 
       console.log('Processing with paths:', { frontImagePath, backImagePath })
 
@@ -319,9 +318,9 @@ export default function UploadPage() {
               team: cardData.team,
               position: cardData.position,
               variation: cardData.variation,
-              image_url: uploadedImage,
-              front_image_url: uploadedImage,
-              back_image_url: uploadedBackImage,
+              image_url: null,
+              front_image_url: null,
+              back_image_url: null,
               rookie: cardData.rookie,
               autographed: cardData.autographed,
               patch: cardData.patch
@@ -489,12 +488,12 @@ export default function UploadPage() {
                 {uploadedImage ? (
                   <div className="space-y-4">
                     <div className="relative w-full aspect-[2.5/3.5] bg-gray-100 rounded-lg overflow-hidden">
-                      <Image 
-                        src={uploadedImage} 
-                        alt="Front of card" 
+                      {frontPreviewUrl && <Image
+                        src={frontPreviewUrl}
+                        alt="Front of card"
                         fill
                         className="object-contain"
-                      />
+                      />}
                     </div>
                     <p className="text-sm text-green-600 font-medium">✓ Front image uploaded</p>
                     <div className="flex flex-col sm:flex-row gap-2 justify-center">
@@ -571,12 +570,12 @@ export default function UploadPage() {
                 {uploadedBackImage ? (
                   <div className="space-y-4">
                     <div className="relative w-full aspect-[2.5/3.5] bg-gray-100 rounded-lg overflow-hidden">
-                      <Image 
-                        src={uploadedBackImage} 
-                        alt="Back of card" 
+                      {backPreviewUrl && <Image
+                        src={backPreviewUrl}
+                        alt="Back of card"
                         fill
                         className="object-contain"
-                      />
+                      />}
                     </div>
                     <p className="text-sm text-green-600 font-medium">✓ Back image uploaded</p>
                     <div className="flex flex-col sm:flex-row gap-2 justify-center">

@@ -1,10 +1,18 @@
-import { CardExtractionResult } from '@/app/api/ai/process-card/route'
+import type { CardExtractionResult } from '@/types'
 
 export interface LLMExtractionOptions {
   model?: 'gpt-4o-mini' | 'gpt-4o' | 'claude-3-sonnet'
   temperature?: number
   maxTokens?: number
   includeReasoningSteps?: boolean
+}
+
+function parseModelJsonObject(content: string): Record<string, unknown> {
+  let trimmed = content.trim()
+  if (trimmed.startsWith('```')) {
+    trimmed = trimmed.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+  }
+  return JSON.parse(trimmed) as Record<string, unknown>
 }
 
 /**
@@ -301,6 +309,115 @@ export async function smartCardExtraction(
     
     // Don't fall back to mock data - throw the error instead
     throw error
+  }
+}
+
+const visionCardSystemPrompt = `You are an expert sports card identifier with deep knowledge of trading cards across all sports and eras. You analyze photos of trading cards (front and optionally back).
+
+IMPORTANT: Return ONLY a valid JSON object with these exact fields (omit fields if uncertain):
+
+{
+  "year": "YYYY" (string, e.g., "2023"),
+  "player_name": "Full Name" (string),
+  "team_name": "Full Team Name" (string, not abbreviations),
+  "position": "Position" (string),
+  "sport": "Sport Name" (string),
+  "set_name": "Set Name" (string),
+  "card_brand": "Brand" (string),
+  "card_number": "Number" (string, e.g., "201", "RC-5"),
+  "attributes": {
+    "rookie": boolean,
+    "autographed": boolean,
+    "patch": boolean (true if PATCH, JERSEY, fabric swatch, game-used, material, Rookie Ticket style, etc.)
+  },
+  "confidence": 0.0-1.0 (number),
+  "raw_ocr_text": "string — transcribe ALL visible text from the images; label sections FRONT OF CARD: and BACK OF CARD: when both are shown"
+}
+
+Recognition guidelines:
+- Team names: full names (e.g., "New York Yankees" not "NYY")
+- Years: season years like "2023-24" → use "2023"
+- Rookie: RC, ROOKIE, first-year indicators
+- Autographs: AUTO, AUTOGRAPH, signature visible
+- Patches: PATCH, JERSEY, GAME-USED, MATERIAL, SWATCH, RELIC, ticket-stub layouts, Contenders/Prizm-style premium cards
+
+CRITICAL — CARD NUMBER vs PLAYER JERSEY NUMBER:
+- "card_number" is the card's number in the set (from back/corners/set info), NOT the player's uniform number.
+
+Use the back image when present for set name, manufacturer, copyright year, and card numbering.
+
+Do not include any text before or after the JSON object.`
+
+/**
+ * Single GPT-4o Vision call: front image plus optional back image → structured card data.
+ */
+export async function smartCardVisionExtraction(
+  parts: { frontDataUrl: string; backDataUrl?: string | null },
+  options: LLMExtractionOptions = {}
+): Promise<CardExtractionResult & { validation: ReturnType<typeof validateCardData> }> {
+  const { model = 'gpt-4o', temperature = 0.1, maxTokens = 1500 } = options
+
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OpenAI API key not configured. Please add OPENAI_API_KEY to your environment variables.')
+  }
+
+  const systemPrompt = visionCardSystemPrompt
+
+  const userContent: Array<
+    { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
+  > = [
+    {
+      type: 'text',
+      text:
+        'Images follow in order: first = FRONT of the card.' +
+        (parts.backDataUrl ? ' Second = BACK of the same card.' : '')
+    },
+    { type: 'image_url', image_url: { url: parts.frontDataUrl } }
+  ]
+  if (parts.backDataUrl) {
+    userContent.push({ type: 'text', text: 'BACK of the same card:' })
+    userContent.push({ type: 'image_url', image_url: { url: parts.backDataUrl } })
+  }
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userContent }
+      ],
+      temperature,
+      max_tokens: maxTokens
+    })
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(
+      `OpenAI API error: ${response.status} ${response.statusText} - ${errorData.error?.message || 'Unknown error'}`
+    )
+  }
+
+  const result = await response.json()
+  const content = result.choices[0].message.content.trim()
+
+  try {
+    const raw = parseModelJsonObject(content) as CardExtractionResult
+    const validation = validateCardData(raw)
+    const ocrForPost = raw.raw_ocr_text || ''
+    const postProcessed = postProcessPatchDetection(raw, ocrForPost)
+    return {
+      ...postProcessed,
+      validation
+    }
+  } catch {
+    console.error('Failed to parse vision LLM response:', content)
+    throw new Error('Invalid JSON response from vision model')
   }
 }
 
