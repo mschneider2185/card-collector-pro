@@ -157,7 +157,7 @@ export default function UploadPage() {
         throw insertError
       }
 
-      // Kick off async processing — returns immediately
+      // Open SSE stream — Edge function sends events as it processes
       const processResponse = await fetch('/api/ai/process-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -168,75 +168,78 @@ export default function UploadPage() {
         })
       })
 
-      if (!processResponse.ok) {
-        const errorData = await processResponse.json()
-        console.error('AI processing start error:', errorData)
+      if (!processResponse.ok || !processResponse.body) {
+        console.error('AI processing start error:', processResponse.status)
         alert('Failed to start AI processing. You can manually enter card details below.')
         setShowCardForm(true)
         return
       }
 
-      // Poll Supabase directly for completion status
-      const uploadId = uploadRecord.id
-      const maxAttempts = 45 // ~90 seconds
-      let attempts = 0
+      // Read SSE stream and update UI as events arrive
+      const reader = processResponse.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let resolved = false
 
-      while (attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 2000))
-        attempts++
+      while (!resolved) {
+        const { done, value } = await reader.read()
+        if (done) break
 
-        if (attempts === 3) setProcessingStep('Extracting card details...')
-        if (attempts === 8) setProcessingStep('Almost done...')
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
 
-        const { data: uploadRow } = await supabase
-          .from('card_uploads')
-          .select('status, extracted_data, confidence_score, error_message')
-          .eq('id', uploadId)
-          .single()
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const event = JSON.parse(line.slice(6))
 
-        if (!uploadRow) continue
-
-        if (uploadRow.status === 'completed' && uploadRow.extracted_data) {
-          const data = uploadRow.extracted_data as CardExtractionResult
-          setProcessingResult({
-            uploadId,
-            imagePath: frontImagePath,
-            extractedData: data,
-            confidence: uploadRow.confidence_score || data.confidence || 0.5,
-            ocrText: data.raw_ocr_text,
-            processingMetadata: undefined
-          })
-          setCardData({
-            sport: data.sport || '',
-            year: data.year ? parseInt(data.year) : new Date().getFullYear(),
-            brand: data.card_brand || '',
-            series: data.set_name || '',
-            set_number: data.set_name || '',
-            card_number: data.card_number || '',
-            player_name: data.player_name || '',
-            team: data.team_name || '',
-            position: data.position || '',
-            variation: '',
-            condition: '',
-            quantity: 1,
-            notes: '',
-            rookie: data.attributes?.rookie || false,
-            autographed: data.attributes?.autographed || false,
-            patch: data.attributes?.patch || false
-          })
-          setShowCardForm(true)
-          break
-        } else if (uploadRow.status === 'failed') {
-          console.error('AI processing failed:', uploadRow.error_message)
-          alert(uploadRow.error_message || 'AI processing failed. You can manually enter card details below.')
-          setShowCardForm(true)
-          break
+            if (event.step) {
+              setProcessingStep(event.step)
+            } else if (event.status === 'completed') {
+              const data = event.extractedData as CardExtractionResult
+              setProcessingResult({
+                uploadId: uploadRecord.id,
+                imagePath: frontImagePath,
+                extractedData: data,
+                confidence: data.confidence || 0.5,
+                ocrText: data.raw_ocr_text,
+                processingMetadata: undefined
+              })
+              setCardData({
+                sport: data.sport || '',
+                year: data.year ? parseInt(data.year) : new Date().getFullYear(),
+                brand: data.card_brand || '',
+                series: data.set_name || '',
+                set_number: data.set_name || '',
+                card_number: data.card_number || '',
+                player_name: data.player_name || '',
+                team: data.team_name || '',
+                position: data.position || '',
+                variation: '',
+                condition: '',
+                quantity: 1,
+                notes: '',
+                rookie: data.attributes?.rookie || false,
+                autographed: data.attributes?.autographed || false,
+                patch: data.attributes?.patch || false
+              })
+              setShowCardForm(true)
+              resolved = true
+            } else if (event.status === 'failed') {
+              console.error('AI processing failed:', event.error)
+              alert(event.error || 'AI processing failed. You can manually enter card details below.')
+              setShowCardForm(true)
+              resolved = true
+            }
+          } catch {
+            // ignore parse errors on individual lines
+          }
         }
-        // status is 'processing' — keep polling
       }
 
-      if (attempts >= maxAttempts) {
-        alert('Processing is taking longer than expected. You can manually enter card details below.')
+      if (!resolved) {
+        alert('Processing stream ended unexpectedly. You can manually enter card details below.')
         setShowCardForm(true)
       }
     } catch (aiError) {
