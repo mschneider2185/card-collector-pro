@@ -26,6 +26,50 @@ function toDataUrl(buffer: ArrayBuffer, mime: string): string {
   return `data:${mime};base64,${arrayBufferToBase64(buffer)}`
 }
 
+// Raw Supabase Storage REST calls — avoids @supabase/supabase-js Edge compat issues
+async function storageDownload(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  bucket: string,
+  path: string
+): Promise<{ buffer: ArrayBuffer; mime: string }> {
+  const url = `${supabaseUrl}/storage/v1/object/${bucket}/${path}`
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey
+    }
+  })
+  if (!res.ok) throw new Error(`Failed to download ${path}: ${res.status} ${res.statusText}`)
+  return {
+    buffer: await res.arrayBuffer(),
+    mime: res.headers.get('content-type') || mimeFromPath(path)
+  }
+}
+
+async function storageUpload(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  bucket: string,
+  path: string,
+  buffer: ArrayBuffer,
+  mime: string
+): Promise<string> {
+  const url = `${supabaseUrl}/storage/v1/object/${bucket}/${path}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
+      'Content-Type': mime,
+      'x-upsert': 'true'
+    },
+    body: buffer
+  })
+  if (!res.ok) throw new Error(`Failed to upload ${path}: ${res.status} ${res.statusText}`)
+  return `${supabaseUrl}/storage/v1/object/public/${bucket}/${path}`
+}
+
 export async function POST(request: NextRequest) {
   const { uploadId, imagePath, backImagePath } = await request.json()
 
@@ -37,10 +81,9 @@ export async function POST(request: NextRequest) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
       }
 
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-      )
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+      const supabase = createClient(supabaseUrl, serviceRoleKey)
 
       try {
         if (!uploadId || !imagePath) {
@@ -56,40 +99,15 @@ export async function POST(request: NextRequest) {
 
         send({ step: 'Downloading images...' })
 
-        const { data: frontBlob, error: frontError } = await supabase.storage
-          .from('card-uploads')
-          .download(imagePath)
-
-        if (frontError || !frontBlob) {
-          throw new Error(`Failed to download front image: ${frontError?.message}`)
-        }
-
-        const frontBuffer = await frontBlob.arrayBuffer()
-        const frontMime =
-          frontBlob.type && frontBlob.type !== 'application/octet-stream'
-            ? frontBlob.type
-            : mimeFromPath(imagePath)
-        const frontDataUrl = toDataUrl(frontBuffer, frontMime)
+        const front = await storageDownload(supabaseUrl, serviceRoleKey, 'card-uploads', imagePath)
+        const frontDataUrl = toDataUrl(front.buffer, front.mime)
 
         let backDataUrl: string | null = null
-        let backBuffer: ArrayBuffer | null = null
-        let backMime: string | null = null
+        let back: { buffer: ArrayBuffer; mime: string } | null = null
 
         if (backImagePath) {
-          const { data: backBlob, error: backError } = await supabase.storage
-            .from('card-uploads')
-            .download(backImagePath)
-
-          if (backError || !backBlob) {
-            throw new Error(`Failed to download back image: ${backError?.message}`)
-          }
-
-          backBuffer = await backBlob.arrayBuffer()
-          backMime =
-            backBlob.type && backBlob.type !== 'application/octet-stream'
-              ? backBlob.type
-              : mimeFromPath(backImagePath)
-          backDataUrl = toDataUrl(backBuffer, backMime)
+          back = await storageDownload(supabaseUrl, serviceRoleKey, 'card-uploads', backImagePath)
+          backDataUrl = toDataUrl(back.buffer, back.mime)
 
           send({ step: 'Verifying front and back match...' })
 
@@ -121,41 +139,17 @@ export async function POST(request: NextRequest) {
 
         send({ step: 'Publishing images...' })
 
-        const frontExt = frontMime.includes('png')
-          ? 'png'
-          : frontMime.includes('webp')
-            ? 'webp'
-            : 'jpg'
-        const frontDestPath = `${uploadId}/front.${frontExt}`
-        await supabase.storage
-          .from('card-images')
-          .upload(frontDestPath, new Blob([frontBuffer], { type: frontMime }), {
-            contentType: frontMime,
-            upsert: true
-          })
-        const { data: frontUrlData } = supabase.storage
-          .from('card-images')
-          .getPublicUrl(frontDestPath)
-        const frontPublicUrl = frontUrlData.publicUrl
+        const frontExt = front.mime.includes('png') ? 'png' : front.mime.includes('webp') ? 'webp' : 'jpg'
+        const frontPublicUrl = await storageUpload(
+          supabaseUrl, serviceRoleKey, 'card-images', `${uploadId}/front.${frontExt}`, front.buffer, front.mime
+        )
 
         let backPublicUrl: string | null = null
-        if (backBuffer && backMime) {
-          const backExt = backMime.includes('png')
-            ? 'png'
-            : backMime.includes('webp')
-              ? 'webp'
-              : 'jpg'
-          const backDestPath = `${uploadId}/back.${backExt}`
-          await supabase.storage
-            .from('card-images')
-            .upload(backDestPath, new Blob([backBuffer], { type: backMime }), {
-              contentType: backMime,
-              upsert: true
-            })
-          const { data: backUrlData } = supabase.storage
-            .from('card-images')
-            .getPublicUrl(backDestPath)
-          backPublicUrl = backUrlData.publicUrl
+        if (back) {
+          const backExt = back.mime.includes('png') ? 'png' : back.mime.includes('webp') ? 'webp' : 'jpg'
+          backPublicUrl = await storageUpload(
+            supabaseUrl, serviceRoleKey, 'card-images', `${uploadId}/back.${backExt}`, back.buffer, back.mime
+          )
         }
 
         const ocrText = extractedData.raw_ocr_text || ''
