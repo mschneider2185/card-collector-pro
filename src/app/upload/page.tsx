@@ -94,13 +94,15 @@ export default function UploadPage() {
     }
 
     try {
-      const fileExt = file.name.split('.').pop()
+      const rawExt = file.name.split('.').pop()?.toLowerCase()
+      const fileExt = rawExt && rawExt !== 'undefined' ? rawExt : 'jpg'
+      const mimeType = file.type || (fileExt === 'png' ? 'image/png' : fileExt === 'webp' ? 'image/webp' : 'image/jpeg')
       const prefix = isBackImage ? 'back_' : 'front_'
       const fileName = `${user.id}/${prefix}${Date.now()}.${fileExt}`
 
       const { error: uploadError } = await supabase.storage
         .from('card-uploads')
-        .upload(fileName, file)
+        .upload(fileName, file, { contentType: mimeType })
 
       if (uploadError) {
         throw uploadError
