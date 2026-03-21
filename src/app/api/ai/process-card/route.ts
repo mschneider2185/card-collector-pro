@@ -27,9 +27,13 @@ function toDataUrl(buffer: ArrayBuffer, mime: string): string {
 }
 
 // Fetch an image from a pre-signed URL (no auth needed — token is in the URL)
-async function fetchSignedUrl(signedUrl: string, fallbackMime: string): Promise<{ buffer: ArrayBuffer; mime: string }> {
+async function fetchSignedUrl(signedUrl: string | null | undefined, fallbackMime: string): Promise<{ buffer: ArrayBuffer; mime: string }> {
+  if (!signedUrl) throw new Error('No signed URL provided — image may not have uploaded correctly')
   const res = await fetch(signedUrl)
-  if (!res.ok) throw new Error(`Failed to fetch image: ${res.status} ${res.statusText}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Failed to fetch image: ${res.status} ${res.statusText}${body ? ` — ${body}` : ''}`)
+  }
   return {
     buffer: await res.arrayBuffer(),
     mime: res.headers.get('content-type') || fallbackMime
@@ -55,7 +59,10 @@ async function storageUpload(
     },
     body: buffer
   })
-  if (!res.ok) throw new Error(`Failed to upload ${path}: ${res.status} ${res.statusText}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Failed to upload ${path}: ${res.status} ${res.statusText}${body ? ` — ${body}` : ''}`)
+  }
   return `${supabaseUrl}/storage/v1/object/public/${bucket}/${path}`
 }
 
