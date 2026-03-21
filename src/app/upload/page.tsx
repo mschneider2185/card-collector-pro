@@ -6,6 +6,7 @@ import { User } from '@supabase/supabase-js'
 import Link from 'next/link'
 import Image from 'next/image'
 import CameraCapture from '@/components/CameraCapture'
+import SheetUploadMode from './SheetUploadMode'
 
 import type { CardExtractionResult } from '@/types'
 
@@ -39,6 +40,7 @@ interface ProcessingResult {
 
 export default function UploadPage() {
   const [user, setUser] = useState<User | null>(null)
+  const [uploadMode, setUploadMode] = useState<'single' | 'sheet'>('single')
   const [uploading, setUploading] = useState(false)
   const [uploadedImage, setUploadedImage] = useState<string | null>(null)
   const [uploadedBackImage, setUploadedBackImage] = useState<string | null>(null)
@@ -496,7 +498,49 @@ export default function UploadPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Upload Section */}
+        {/* Mode Selector */}
+        <div className="flex rounded-xl overflow-hidden border border-white/30 shadow mb-6 bg-white/60 backdrop-blur-sm w-fit mx-auto">
+          <button
+            onClick={() => setUploadMode('single')}
+            className={`px-6 py-2.5 text-sm font-semibold transition-colors ${
+              uploadMode === 'single'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-600 hover:bg-white/60'
+            }`}
+          >
+            Single Card
+          </button>
+          <button
+            onClick={() => setUploadMode('sheet')}
+            className={`px-6 py-2.5 text-sm font-semibold transition-colors ${
+              uploadMode === 'sheet'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-600 hover:bg-white/60'
+            }`}
+          >
+            Sheet (3×3)
+          </button>
+        </div>
+
+        {/* Sheet Upload Mode */}
+        {uploadMode === 'sheet' && (
+          <div className="bg-gray-900 rounded-2xl shadow-xl border border-white/10 p-6 mb-8">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-white mb-2">Scan a 3×3 Binder Sheet</h2>
+              <p className="text-gray-400 text-sm max-w-md mx-auto">
+                Photograph a 9-pocket binder page. One AI call extracts all 9 cards at once.
+              </p>
+            </div>
+            {user ? (
+              <SheetUploadMode user={user} />
+            ) : (
+              <p className="text-center text-gray-400 py-8">Please sign in to scan sheets.</p>
+            )}
+          </div>
+        )}
+
+        {/* Upload Section (single-card mode) */}
+        {uploadMode === 'single' && (
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8 mb-8">
           <div className="text-center mb-8">
             <h2 className="text-3xl font-bold text-gray-900 mb-4">Upload Card Images</h2>
@@ -983,6 +1027,7 @@ export default function UploadPage() {
             </div>
           </div>
         </div>
+        )} {/* end uploadMode === 'single' */}
 
         {/* Tips Section */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8">
