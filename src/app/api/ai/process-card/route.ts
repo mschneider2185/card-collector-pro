@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse, after } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { smartCardVisionExtraction, verifyCardMatch } from '@/lib/llm-extraction'
+
+export const maxDuration = 60
 
 const supabaseServiceRole = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -213,10 +215,10 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', uploadId)
 
-    // Kick off processing in the background — response returns immediately
-    after(processCardAsync(uploadId, imagePath, backImagePath ?? null))
+    // Process synchronously — client polls Supabase for status updates
+    await processCardAsync(uploadId, imagePath, backImagePath ?? null)
 
-    return NextResponse.json({ success: true, uploadId, status: 'processing' })
+    return NextResponse.json({ success: true, uploadId, status: 'completed' })
   } catch (error) {
     console.error('API error:', error)
     const message = error instanceof Error ? error.message : 'Unknown error'
