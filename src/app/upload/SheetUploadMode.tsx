@@ -193,6 +193,11 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
       let buffer = ''
       let resolved = false
       let processedCards: ProcessedBatchCard[] = []
+      // Local accumulator avoids stale-closure problem: React state updates
+      // from setSlots() are async, so reading `slots` inside the SSE loop
+      // would always see the initial snapshot. We track card_progress data
+      // here in plain JS and use it when the completed event fires.
+      const cardProgressAccum = new Map<number, BatchCardPosition>()
 
       while (!resolved) {
         const { done, value } = await reader.read()
@@ -212,6 +217,9 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
             } else if (event.type === 'card_progress') {
               const pos = event.position as number
               const card = event.card as BatchCardPosition
+              // Track in local accumulator (used when building review cards)
+              cardProgressAccum.set(pos, card)
+              // Also update UI slots state for the live progress grid
               setSlots(prev => {
                 const next = [...prev]
                 next[pos] = { status: 'done', card }
@@ -224,23 +232,21 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
               resolved = true
             } else if (event.status === 'completed') {
               processedCards = (event.processedCards as ProcessedBatchCard[]) ?? []
-              // Build review cards merging SSE card data with DB card_ids
               const cardMap = new Map<number, ProcessedBatchCard>()
               for (const pc of processedCards) cardMap.set(pc.position, pc)
 
+              // Build review cards from the LOCAL accumulator (not stale state)
               const cards: ReviewCard[] = Array.from({ length: 9 }, (_, i) => {
-                const slot = slots[i]
+                const batchCard = cardProgressAccum.get(i)
                 const pc = cardMap.get(i)
-                if (slot.card) {
-                  return reviewCardFromBatch(slot.card, pc?.card_id ?? null)
+                if (batchCard) {
+                  return reviewCardFromBatch(batchCard, pc?.card_id ?? null)
                 }
                 const empty = emptyReviewCard(i)
                 if (pc) empty.card_id = pc.card_id
                 return empty
               })
 
-              // Use the SSE card_progress data that was already set in state
-              // Re-read slots state after stream completes
               setReviewCards(cards)
               setStage('review')
               resolved = true
@@ -255,8 +261,14 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
         }
       }
 
-      // If completed event didn't fire, build review from accumulated slot state
+      // If the completed event didn't fire, build review from the local accumulator
       if (!resolved) {
+        const fallbackCards: ReviewCard[] = Array.from({ length: 9 }, (_, i) => {
+          const batchCard = cardProgressAccum.get(i)
+          if (batchCard) return reviewCardFromBatch(batchCard, null)
+          return emptyReviewCard(i)
+        })
+        setReviewCards(fallbackCards)
         setStage('review')
       }
     } catch (err) {
