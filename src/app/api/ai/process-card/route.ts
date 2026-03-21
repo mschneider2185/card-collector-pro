@@ -26,24 +26,37 @@ function toDataUrl(buffer: ArrayBuffer, mime: string): string {
   return `data:${mime};base64,${arrayBufferToBase64(buffer)}`
 }
 
-// Raw Supabase Storage REST calls — avoids @supabase/supabase-js Edge compat issues
+// Create a signed URL for a private storage object, then fetch its content
 async function storageDownload(
   supabaseUrl: string,
   serviceRoleKey: string,
   bucket: string,
   path: string
 ): Promise<{ buffer: ArrayBuffer; mime: string }> {
-  const url = `${supabaseUrl}/storage/v1/object/${bucket}/${path}`
-  const res = await fetch(url, {
+  // Step 1: sign the URL via Supabase Storage REST API
+  const signRes = await fetch(`${supabaseUrl}/storage/v1/object/sign/${bucket}/${path}`, {
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${serviceRoleKey}`,
-      apikey: serviceRoleKey
-    }
+      apikey: serviceRoleKey,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ expiresIn: 600 })
   })
-  if (!res.ok) throw new Error(`Failed to download ${path}: ${res.status} ${res.statusText}`)
+  if (!signRes.ok) {
+    throw new Error(`Failed to sign URL for ${path}: ${signRes.status} ${signRes.statusText}`)
+  }
+  const { signedURL } = await signRes.json() as { signedURL: string }
+  const resolvedUrl = signedURL.startsWith('http') ? signedURL : `${supabaseUrl}${signedURL}`
+
+  // Step 2: fetch the file content using the signed URL (no auth headers needed)
+  const fileRes = await fetch(resolvedUrl)
+  if (!fileRes.ok) {
+    throw new Error(`Failed to fetch signed URL for ${path}: ${fileRes.status}`)
+  }
   return {
-    buffer: await res.arrayBuffer(),
-    mime: res.headers.get('content-type') || mimeFromPath(path)
+    buffer: await fileRes.arrayBuffer(),
+    mime: fileRes.headers.get('content-type') || mimeFromPath(path)
   }
 }
 
