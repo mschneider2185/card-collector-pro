@@ -1,4 +1,4 @@
-import type { CardExtractionResult } from '@/types'
+import type { CardExtractionResult, BatchCardPosition, SheetExtractionResult } from '@/types'
 
 export interface LLMExtractionOptions {
   model?: 'gpt-4o-mini' | 'gpt-4o' | 'claude-3-sonnet'
@@ -493,3 +493,190 @@ export async function smartCardVisionExtraction(
 // Removed unused function
 
 // Removed unused function
+
+// ────────────────────────────────────────────────────────────────────────────
+// Sheet / batch extraction — 3×3 binder page in a single API call
+// ────────────────────────────────────────────────────────────────────────────
+
+const sheetVisionSystemPrompt = `You are an expert sports card identifier with deep knowledge of trading cards across all sports and eras.
+
+You will receive an image of a 3×3 binder page (or a flat sheet of 9 trading cards arranged in 3 columns and 3 rows).
+
+STEP 1 — GRID DETECTION:
+First, assess whether the image contains a recognizable 3×3 grid of trading cards. If the image does NOT contain a clear 3×3 layout of cards, return ONLY:
+{ "grid_detected": false, "cards": [] }
+
+STEP 2 — CELL EXTRACTION (only if grid detected):
+Process each of the 9 cells independently, as if each were a standalone card photo.
+Cells are numbered row-major starting from the top-left:
+  0=top-left    1=top-center    2=top-right
+  3=middle-left 4=middle-center 5=middle-right
+  6=bottom-left 7=bottom-center 8=bottom-right
+
+For each cell extract:
+{
+  "year": "YYYY",
+  "player_name": "Full Name",
+  "team_name": "Full Team Name (not abbreviations)",
+  "position": "Position",
+  "sport": "Sport Name",
+  "set_name": "Set Name",
+  "card_brand": "Brand",
+  "card_number": "Number in set (NOT player jersey number)",
+  "attributes": {
+    "rookie": boolean,
+    "autographed": boolean,
+    "patch": boolean
+  },
+  "confidence": 0.0-1.0,
+  "raw_ocr_text": "All visible text from this cell"
+}
+
+CONFIDENCE RULES:
+- Set "confidence" >= 0.8 and assign confidence_level "high" when player name, sport, and year are clearly legible.
+- Set "confidence" 0.5–0.79 → "medium". Set "confidence" < 0.5 → "low".
+- Any cell where you are uncertain → set needs_review: true.
+- Empty pockets / blank slots → card: null, confidence_level: "low", needs_review: true.
+- Do NOT hallucinate card data. If a field is unclear, omit it.
+- Partial recognition is acceptable — flag rather than guess.
+
+RETURN a JSON object with EXACTLY this shape (9 entries, positions 0–8):
+{
+  "grid_detected": true,
+  "cards": [
+    {
+      "position": 0,
+      "confidence": "high" | "medium" | "low",
+      "needs_review": boolean,
+      "card": { ...card fields above... } | null
+    },
+    ... (exactly 9 entries)
+  ]
+}
+
+Do not include any text before or after the JSON object.`
+
+/**
+ * Single GPT-4o Vision call: one 3×3 sheet image → structured data for all 9 positions.
+ * Returns exactly 9 BatchCardPosition entries (padded with nulls if fewer are detected).
+ */
+export async function smartSheetVisionExtraction(
+  sheetDataUrl: string,
+  options: LLMExtractionOptions = {}
+): Promise<SheetExtractionResult> {
+  const { model = 'gpt-4o', temperature = 0.1, maxTokens = 4000 } = options
+
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OpenAI API key not configured.')
+  }
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: sheetVisionSystemPrompt },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'This image shows a 3×3 binder page or sheet of trading cards. Extract all 9 card positions as instructed.'
+            },
+            { type: 'image_url', image_url: { url: sheetDataUrl } }
+          ]
+        }
+      ],
+      temperature,
+      max_tokens: maxTokens
+    })
+  })
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(
+      `OpenAI API error: ${response.status} ${response.statusText} - ${(err as { error?: { message?: string } }).error?.message || 'Unknown error'}`
+    )
+  }
+
+  const result = await response.json()
+  const content = (result as { choices: Array<{ message: { content: string } }> }).choices[0].message.content.trim()
+
+  let raw: { grid_detected: boolean; cards: Array<Record<string, unknown>> }
+  try {
+    raw = parseModelJsonObject(content) as typeof raw
+  } catch {
+    console.error('Failed to parse sheet vision response:', content)
+    throw new Error('Invalid JSON response from sheet vision model')
+  }
+
+  if (!raw.grid_detected) {
+    return { grid_detected: false, cards: [] }
+  }
+
+  // Normalise and pad to exactly 9 positions
+  const seen = new Set<number>()
+  const positions: BatchCardPosition[] = []
+
+  for (const entry of raw.cards ?? []) {
+    const pos = typeof entry.position === 'number' ? entry.position : -1
+    if (pos < 0 || pos > 8 || seen.has(pos)) continue
+    seen.add(pos)
+
+    const rawCard = entry.card as Record<string, unknown> | null
+    const cardData: CardExtractionResult | null = rawCard
+      ? {
+          year: rawCard.year as string | undefined,
+          player_name: rawCard.player_name as string | undefined,
+          team_name: rawCard.team_name as string | undefined,
+          position: rawCard.position as string | undefined,
+          sport: rawCard.sport as string | undefined,
+          set_name: rawCard.set_name as string | undefined,
+          card_brand: rawCard.card_brand as string | undefined,
+          card_number: rawCard.card_number as string | undefined,
+          attributes: rawCard.attributes as CardExtractionResult['attributes'],
+          confidence: typeof rawCard.confidence === 'number' ? rawCard.confidence : undefined,
+          raw_ocr_text: rawCard.raw_ocr_text as string | undefined
+        }
+      : null
+
+    // Post-process patch detection for non-null cards
+    const processedCard =
+      cardData && cardData.raw_ocr_text
+        ? postProcessPatchDetection(cardData, cardData.raw_ocr_text)
+        : cardData
+
+    const confidenceNum =
+      processedCard?.confidence ?? (cardData?.confidence as number | undefined) ?? 0
+    const confidenceLabel: 'high' | 'medium' | 'low' =
+      confidenceNum >= 0.8 ? 'high' : confidenceNum >= 0.5 ? 'medium' : 'low'
+
+    positions.push({
+      position: pos,
+      confidence: (entry.confidence as 'high' | 'medium' | 'low') ?? confidenceLabel,
+      needs_review: Boolean(entry.needs_review) || confidenceLabel === 'low' || !processedCard,
+      card: processedCard
+    })
+  }
+
+  // Pad missing positions with null entries
+  for (let i = 0; i < 9; i++) {
+    if (!seen.has(i)) {
+      positions.push({
+        position: i,
+        confidence: 'low',
+        needs_review: true,
+        card: null
+      })
+    }
+  }
+
+  // Sort by position
+  positions.sort((a, b) => a.position - b.position)
+
+  return { grid_detected: true, cards: positions }
+}

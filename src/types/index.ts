@@ -104,3 +104,32 @@ export interface UserCardUpdateData {
   acquired_at?: string | null
 }
 
+// Batch / sheet scanning types
+
+/** A single card position within a 3×3 binder sheet (row-major: 0=top-left … 8=bottom-right). */
+export interface BatchCardPosition {
+  /** 0–8, row-major order */
+  position: number
+  /** Model's overall confidence for this cell */
+  confidence: 'high' | 'medium' | 'low'
+  /** True when confidence is low or recognition was partial — user must confirm before saving */
+  needs_review: boolean
+  /** Extracted card data, or null for empty / unreadable cells */
+  card: CardExtractionResult | null
+}
+
+/** Full result of a single-call 3×3 sheet extraction. */
+export interface SheetExtractionResult {
+  /** False when the image does not contain a recognizable 3×3 grid */
+  grid_detected: boolean
+  /** Always exactly 9 entries (positions 0–8), padded with nulls when needed */
+  cards: BatchCardPosition[]
+}
+
+/** A card slot in the batch review UI — tracks DB card_id after the server upserts the cards table. */
+export interface ProcessedBatchCard {
+  position: number
+  card_id: string | null
+  needs_review: boolean
+}
+
