@@ -47,6 +47,7 @@ export default function UploadPage() {
   const [showCardForm, setShowCardForm] = useState(false)
   const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null)
   const [processing, setProcessing] = useState(false)
+  const [processingStep, setProcessingStep] = useState<string>('')
   const [showCamera, setShowCamera] = useState(false)
   const [cameraMode, setCameraMode] = useState<'front' | 'back'>('front')
   const [cardData, setCardData] = useState<CardData>({
@@ -135,12 +136,11 @@ export default function UploadPage() {
 
     setProcessing(true)
     setProcessingResult(null)
+    setProcessingStep(uploadedBackImage ? 'Verifying card images...' : 'Analyzing card...')
 
     try {
       const frontImagePath = uploadedImage
       const backImagePath = uploadedBackImage ?? null
-
-      console.log('Processing with paths:', { frontImagePath, backImagePath })
 
       // Create upload record
       const { data: uploadRecord, error: insertError } = await supabase
@@ -157,12 +157,10 @@ export default function UploadPage() {
         throw insertError
       }
 
-      // Trigger AI processing
+      // Kick off async processing — returns immediately
       const processResponse = await fetch('/api/ai/process-card', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           uploadId: uploadRecord.id,
           imagePath: frontImagePath,
@@ -170,48 +168,70 @@ export default function UploadPage() {
         })
       })
 
-      if (processResponse.ok) {
-        const result = await processResponse.json()
-        setProcessingResult({
-          uploadId: uploadRecord.id,
-          imagePath: frontImagePath,
-          extractedData: result.data,
-          confidence: result.data.confidence || 0.5,
-          ocrText: result.data.raw_ocr_text,
-          processingMetadata: result.data.processing_metadata
-        })
-        
-        // Pre-populate form with extracted data
-        const data = result.data
-        setCardData({
-          sport: data.sport || '',
-          year: data.year ? parseInt(data.year) : new Date().getFullYear(),
-          brand: data.card_brand || '',
-          series: data.set_name || '',
-          set_number: data.set_name || '',
-          card_number: data.card_number || '',
-          player_name: data.player_name || '',
-          team: data.team_name || '',
-          position: data.position || '',
-          variation: '',
-          condition: '',
-          quantity: 1,
-          notes: '',
-          rookie: data.attributes?.rookie || false,
-          autographed: data.attributes?.autographed || false,
-          patch: data.attributes?.patch || false
-        })
-        
-        setShowCardForm(true)
-      } else {
+      if (!processResponse.ok) {
         const errorData = await processResponse.json()
-        console.error('AI processing error:', errorData)
-        
-        if (errorData.error === 'OCR service not configured' || errorData.error === 'AI processing service not configured') {
-          alert(`AI processing is not configured. ${errorData.suggestion} For now, you can manually enter card details below.`)
-        } else {
-          alert('Image uploaded successfully, but AI processing failed. You can manually enter card details below.')
+        console.error('AI processing start error:', errorData)
+        alert('Failed to start AI processing. You can manually enter card details below.')
+        setShowCardForm(true)
+        return
+      }
+
+      // Poll for completion
+      const uploadId = uploadRecord.id
+      const maxAttempts = 45 // ~90 seconds
+      let attempts = 0
+
+      while (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        attempts++
+
+        if (attempts === 3) setProcessingStep('Extracting card details...')
+        if (attempts === 8) setProcessingStep('Almost done...')
+
+        const statusRes = await fetch(`/api/ai/process-card/${uploadId}`)
+        const statusData = await statusRes.json()
+
+        if (statusData.status === 'completed' && statusData.extractedData) {
+          const data = statusData.extractedData
+          setProcessingResult({
+            uploadId,
+            imagePath: frontImagePath,
+            extractedData: data,
+            confidence: statusData.confidence || data.confidence || 0.5,
+            ocrText: data.raw_ocr_text,
+            processingMetadata: statusData.processingMetadata
+          })
+          setCardData({
+            sport: data.sport || '',
+            year: data.year ? parseInt(data.year) : new Date().getFullYear(),
+            brand: data.card_brand || '',
+            series: data.set_name || '',
+            set_number: data.set_name || '',
+            card_number: data.card_number || '',
+            player_name: data.player_name || '',
+            team: data.team_name || '',
+            position: data.position || '',
+            variation: '',
+            condition: '',
+            quantity: 1,
+            notes: '',
+            rookie: data.attributes?.rookie || false,
+            autographed: data.attributes?.autographed || false,
+            patch: data.attributes?.patch || false
+          })
+          setShowCardForm(true)
+          break
+        } else if (statusData.status === 'failed') {
+          console.error('AI processing failed:', statusData.errorMessage)
+          alert(statusData.errorMessage || 'AI processing failed. You can manually enter card details below.')
+          setShowCardForm(true)
+          break
         }
+        // status is 'processing' — keep polling
+      }
+
+      if (attempts >= maxAttempts) {
+        alert('Processing is taking longer than expected. You can manually enter card details below.')
         setShowCardForm(true)
       }
     } catch (aiError) {
@@ -220,6 +240,7 @@ export default function UploadPage() {
       setShowCardForm(true)
     } finally {
       setProcessing(false)
+      setProcessingStep('')
     }
   }
 
@@ -648,7 +669,7 @@ export default function UploadPage() {
               {processing ? (
                 <div className="flex flex-col items-center">
                   <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-500 mb-6"></div>
-                  <p className="text-lg text-gray-600 mb-2">Analyzing your card...</p>
+                  <p className="text-lg text-gray-600 mb-2">{processingStep || 'Analyzing your card...'}</p>
                   <p className="text-sm text-gray-500">Our AI is identifying card details from {uploadedBackImage ? 'both sides' : 'the front'}</p>
                 </div>
               ) : (

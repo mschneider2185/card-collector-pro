@@ -312,6 +312,75 @@ export async function smartCardExtraction(
   }
 }
 
+/**
+ * Verify that a front and back image belong to the same trading card.
+ * Returns isMatch=false (with reasoning) if they appear to be different cards.
+ */
+export async function verifyCardMatch(
+  frontDataUrl: string,
+  backDataUrl: string
+): Promise<{ isMatch: boolean; confidence: number; reasoning: string }> {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OpenAI API key not configured.')
+  }
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are a trading card expert. You will be shown two images: the front and back of what should be the same trading card. Determine if they belong to the same card. Return ONLY a JSON object: { "isMatch": boolean, "confidence": number (0.0-1.0), "reasoning": string }'
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'FRONT of card:' },
+            { type: 'image_url', image_url: { url: frontDataUrl } },
+            { type: 'text', text: 'BACK of card:' },
+            { type: 'image_url', image_url: { url: backDataUrl } },
+            {
+              type: 'text',
+              text: 'Do these show the front and back of the same trading card? Reply with JSON only.'
+            }
+          ]
+        }
+      ],
+      temperature: 0.1,
+      max_tokens: 200
+    })
+  })
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(`OpenAI API error: ${response.status} - ${err.error?.message || 'Unknown'}`)
+  }
+
+  const result = await response.json()
+  const content = result.choices[0].message.content.trim()
+  try {
+    const parsed = parseModelJsonObject(content) as {
+      isMatch: boolean
+      confidence: number
+      reasoning: string
+    }
+    return {
+      isMatch: parsed.isMatch ?? true,
+      confidence: Math.min(1, Math.max(0, parsed.confidence ?? 0.5)),
+      reasoning: parsed.reasoning ?? ''
+    }
+  } catch {
+    // If parsing fails, assume match to avoid blocking the user
+    return { isMatch: true, confidence: 0.5, reasoning: 'Could not parse verification response' }
+  }
+}
+
 const visionCardSystemPrompt = `You are an expert sports card identifier with deep knowledge of trading cards across all sports and eras. You analyze photos of trading cards (front and optionally back).
 
 IMPORTANT: Return ONLY a valid JSON object with these exact fields (omit fields if uncertain):
