@@ -7,6 +7,30 @@ See VISION.md for the full product vision, phase roadmap, and agent team structu
 Trading card collection platform. Next.js 15, Supabase, TypeScript, Tailwind CSS.
 Live at: card-collector-pro.vercel.app
 
+## Agent Framework
+
+This project uses the Agency Agents NEXUS framework (github.com/mschneider2185/agency-agents).
+Do NOT skip this section. Before writing any code for a non-trivial task, follow the steps below.
+
+### Base URL
+https://raw.githubusercontent.com/mschneider2185/agency-agents/main
+
+### How to activate an agent
+When a task says "Activate [Agent Name]" OR when starting any non-trivial implementation:
+1. WebFetch the agent definition from the base URL (see active agents below)
+2. WebFetch the NEXUS quick-start: {BASE_URL}/strategy/QUICKSTART.md
+3. WebFetch the handoff template: {BASE_URL}/strategy/coordination/handoff-templates.md
+4. State acceptance criteria BEFORE writing any code
+5. On completion, produce a Standard Handoff artifact (from handoff-templates.md)
+
+### Current phase: Phase 2 — Collection Experience (NEXUS-Sprint)
+Active agents:
+- Frontend Developer  → {BASE_URL}/engineering/engineering-frontend-developer.md
+- Evidence Collector  → {BASE_URL}/testing/testing-evidence-collector.md
+- Agents Orchestrator → {BASE_URL}/specialized/agents-orchestrator.md
+
+Active tracks: Track A (Core product), Track C (Quality)
+
 ## Current State (March 2026)
 - Supabase project: card-collector-pro-v2, project ref: gbsqgodoyuxsnaxnxjiq
 - Database fully built and live
