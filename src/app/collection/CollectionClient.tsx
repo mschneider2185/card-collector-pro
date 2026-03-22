@@ -173,12 +173,17 @@ function CardModal({ userCard, onClose, onDelete, onUpdate }: CardModalProps) {
                 </div>
               </>
             ) : (
-              <div className="max-w-[240px] w-full">
-                <div className="relative aspect-[2.5/3.5] overflow-hidden" style={{ background: 'var(--color-bg)', borderRadius: '2px' }}>
+              <div className="max-w-[380px] w-full">
+                <div className="overflow-hidden" style={{ background: 'var(--color-bg)', borderRadius: '2px' }}>
                   {frontSrc ? (
-                    <Image src={frontSrc} alt={`${userCard.card?.player_name || 'Card'}`} fill className="object-contain" />
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={frontSrc}
+                      alt={`${userCard.card?.player_name || 'Card'}`}
+                      className="w-full h-auto object-contain"
+                    />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center">
+                    <div className="w-full aspect-[2.5/3.5] flex items-center justify-center">
                       <svg className="w-16 h-16" style={{ color: 'var(--color-border)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
