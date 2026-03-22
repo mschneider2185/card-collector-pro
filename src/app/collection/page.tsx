@@ -55,6 +55,12 @@ export default async function CollectionPage({
             {/* Right: actions */}
             <div className="flex items-center gap-2 shrink-0">
               <Link
+                href="/collection/sets"
+                className="hidden sm:inline-flex items-center px-3.5 py-2 text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl transition-colors shadow-sm"
+              >
+                Set Completion
+              </Link>
+              <Link
                 href="/cards"
                 className="hidden sm:inline-flex items-center px-3.5 py-2 text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl transition-colors shadow-sm"
               >

@@ -133,3 +133,95 @@ export interface ProcessedBatchCard {
   needs_review: boolean
 }
 
+// =============================================================================
+// Set completion tracking types
+// Mirrors: card_sets, card_set_memberships, user_set_completion (view)
+// =============================================================================
+
+/**
+ * Categorisation of a card set or subset.
+ * Matches the CHECK constraint on card_sets.subset_type.
+ */
+export type CardSetSubsetType =
+  | 'base'
+  | 'rookies'
+  | 'inserts'
+  | 'parallels'
+  | 'autographs'
+  | 'relics'
+  | 'short_prints'
+  | 'variations'
+  | 'other'
+
+/**
+ * A card set or subset in the master catalog.
+ * Top-level sets have parent_set_id = null.
+ * Subsets (inserts, parallels, rookie variations, etc.) reference their parent
+ * via parent_set_id.
+ */
+export interface CardSet {
+  id: string
+  name: string
+  brand: string
+  year: number
+  sport: string
+  /** Total number of cards in this set/subset. Null when the checklist is not yet known. */
+  total_cards: number | null
+  /**
+   * Human-readable card number range, e.g. "1-200", "RC-1-RC-50", "NNO".
+   * Stored as a display string; not used for range arithmetic in the DB.
+   */
+  card_number_range: string | null
+  subset_type: CardSetSubsetType
+  /** Null for top-level sets; UUID of the parent set for subsets. */
+  parent_set_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * Many-to-many join between cards and card_sets.
+ * A single card can belong to multiple sets (e.g. base set + an insert subset).
+ * Composite PK: (card_id, set_id).
+ */
+export interface CardSetMembership {
+  card_id: string
+  set_id: string
+  /**
+   * The card's position number within this specific set/subset.
+   * May differ from card.card_number — e.g. an insert numbered "RC-12"
+   * within its insert set while the base card is numbered "47".
+   */
+  set_card_number: string | null
+  created_at: string
+}
+
+/**
+ * One row from the user_set_completion view.
+ * Represents a single user's ownership progress within one card set.
+ *
+ * Example: { set_name: "Series 1", brand: "Topps", year: 2020,
+ *             total_cards: 200, cards_owned: 3, completion_percentage: 1.50 }
+ * Readable as: "You have 3 of 200 cards from 2020 Topps Series 1."
+ */
+export interface UserSetCompletion {
+  user_id: string
+  set_id: string
+  set_name: string
+  brand: string
+  year: number
+  sport: string
+  subset_type: CardSetSubsetType
+  parent_set_id: string | null
+  card_number_range: string | null
+  /** Null when the set's full checklist is unknown. */
+  total_cards: number | null
+  /** Distinct cards the user owns that are members of this set. */
+  cards_owned: number
+  /**
+   * Rounded to 2 decimal places. Null when total_cards is null.
+   * Range: 0.00 – 100.00
+   */
+  completion_percentage: number | null
+}
+
