@@ -63,11 +63,12 @@ async function storageUpload(
 }
 
 export async function POST(request: NextRequest) {
-  const { batchId, uploadId, sheetSignedUrl, imagePath } = await request.json() as {
+  const { batchId, uploadId, sheetSignedUrl, imagePath, cropDataUrls } = await request.json() as {
     batchId: string
     uploadId: string
     sheetSignedUrl: string
     imagePath: string
+    cropDataUrls?: string[]
   }
 
   const encoder = new TextEncoder()
@@ -104,7 +105,7 @@ export async function POST(request: NextRequest) {
         const sheetResult = await smartSheetVisionExtraction(sheetDataUrl, {
           model: 'gpt-4o',
           temperature: 0.1,
-          maxTokens: 4000
+          maxTokens: 6000
         })
 
         if (!sheetResult.grid_detected) {
@@ -120,6 +121,33 @@ export async function POST(request: NextRequest) {
           send({ type: 'error', reason: 'no_grid_detected' })
           controller.close()
           return
+        }
+
+        // Upload per-card crop images if provided by the client
+        const cropImageUrls: string[] = Array(9).fill('')
+        if (Array.isArray(cropDataUrls) && cropDataUrls.length > 0) {
+          for (let i = 0; i < 9; i++) {
+            const dataUrl = cropDataUrls[i]
+            if (!dataUrl || !dataUrl.startsWith('data:')) continue
+            try {
+              const [header, b64] = dataUrl.split(',')
+              const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg'
+              const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg'
+              const binary = atob(b64)
+              const bytes = new Uint8Array(binary.length)
+              for (let j = 0; j < binary.length; j++) bytes[j] = binary.charCodeAt(j)
+              cropImageUrls[i] = await storageUpload(
+                supabaseUrl,
+                serviceRoleKey,
+                'card-images',
+                `batch/${batchId}/pos${i}.${ext}`,
+                bytes.buffer,
+                mime
+              )
+            } catch (cropErr) {
+              console.error(`Failed to upload crop for position ${i}:`, cropErr)
+            }
+          }
         }
 
         // Emit per-card progress events so the UI can populate slots incrementally
@@ -167,8 +195,8 @@ export async function POST(request: NextRequest) {
             team: c.team_name ?? null,
             position: c.position ?? null,
             variation: '',
-            image_url: sheetPublicUrl,
-            front_image_url: sheetPublicUrl,
+            image_url: cropImageUrls[cardPos.position] || sheetPublicUrl,
+            front_image_url: cropImageUrls[cardPos.position] || sheetPublicUrl,
             confidence_score: c.confidence ?? 0.5,
             ocr_text: c.raw_ocr_text ?? '',
             processing_metadata: {

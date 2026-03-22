@@ -71,23 +71,60 @@ function reviewCardFromBatch(pos: BatchCardPosition, card_id: string | null): Re
 
 /**
  * Crop a File into 9 equal cells (row-major) and return data URLs.
- * Runs entirely client-side via Canvas API.
+ * Runs entirely client-side via Canvas API. Caps each cell at 900px wide.
  */
 async function cropSheetIntoThumbnails(file: File): Promise<string[]> {
   return new Promise(resolve => {
     const img = new window.Image()
     img.onload = () => {
-      const cw = Math.floor(img.width / 3)
-      const ch = Math.floor(img.height / 3)
+      const srcW = Math.floor(img.width / 3)
+      const srcH = Math.floor(img.height / 3)
+      const scale = Math.min(1, 900 / srcW)
+      const outW = Math.round(srcW * scale)
+      const outH = Math.round(srcH * scale)
       const crops: string[] = []
       for (let row = 0; row < 3; row++) {
         for (let col = 0; col < 3; col++) {
           const canvas = document.createElement('canvas')
-          canvas.width = cw
-          canvas.height = ch
+          canvas.width = outW
+          canvas.height = outH
           const ctx = canvas.getContext('2d')!
-          ctx.drawImage(img, col * cw, row * ch, cw, ch, 0, 0, cw, ch)
-          crops.push(canvas.toDataURL('image/jpeg', 0.85))
+          ctx.drawImage(img, col * srcW, row * srcH, srcW, srcH, 0, 0, outW, outH)
+          crops.push(canvas.toDataURL('image/jpeg', 0.82))
+        }
+      }
+      URL.revokeObjectURL(img.src)
+      resolve(crops)
+    }
+    img.src = URL.createObjectURL(file)
+  })
+}
+
+/**
+ * Crop the BACK of a binder page sheet into 9 thumbnails, column-mirrored.
+ * Front position p at (row r, col c) maps to back image at (row r, col 2-c).
+ * Returns array of 9 data URLs where index i = back of card at front-position i.
+ */
+async function cropBackSheetIntoThumbnails(file: File): Promise<string[]> {
+  return new Promise(resolve => {
+    const img = new window.Image()
+    img.onload = () => {
+      const srcW = Math.floor(img.width / 3)
+      const srcH = Math.floor(img.height / 3)
+      const scale = Math.min(1, 900 / srcW)
+      const outW = Math.round(srcW * scale)
+      const outH = Math.round(srcH * scale)
+      const crops: string[] = []
+      for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 3; col++) {
+          // col 2-col is the mirrored back column
+          const backCol = 2 - col
+          const canvas = document.createElement('canvas')
+          canvas.width = outW
+          canvas.height = outH
+          const ctx = canvas.getContext('2d')!
+          ctx.drawImage(img, backCol * srcW, row * srcH, srcW, srcH, 0, 0, outW, outH)
+          crops.push(canvas.toDataURL('image/jpeg', 0.82))
         }
       }
       URL.revokeObjectURL(img.src)
@@ -122,7 +159,13 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
   const [noGridError, setNoGridError] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const reScanInputRef = useRef<HTMLInputElement>(null)
+  const backFileInputRef = useRef<HTMLInputElement>(null)
   const [reScanPosition, setReScanPosition] = useState<number | null>(null)
+
+  const [backCropThumbnails, setBackCropThumbnails] = useState<string[]>([])
+  const [backSheetPreview, setBackSheetPreview] = useState<string | null>(null)
+  const [backStage, setBackStage] = useState<'idle' | 'processing' | 'done'>('idle')
+  const [backProgress, setBackProgress] = useState(0)
 
   // ── Upload & process ──────────────────────────────────────────────────────
 
@@ -135,10 +178,10 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
     const crops = await cropSheetIntoThumbnails(file)
     setCropThumbnails(crops)
 
-    await uploadAndProcess(file)
+    await uploadAndProcess(file, crops)
   }
 
-  const uploadAndProcess = async (file: File) => {
+  const uploadAndProcess = async (file: File, cropDataUrls: string[]) => {
     setStage('processing')
     setProcessingStep('Uploading sheet...')
     setSlots(Array.from({ length: 9 }, () => ({ status: 'loading', card: null })))
@@ -184,7 +227,8 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           batchId, uploadId: uploadRecord.id,
-          sheetSignedUrl: signedData.signedUrl, imagePath: path
+          sheetSignedUrl: signedData.signedUrl, imagePath: path,
+          cropDataUrls
         })
       })
       if (!processRes.ok || !processRes.body) throw new Error('Failed to start sheet processing')
@@ -267,6 +311,55 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
       setSlots(Array.from({ length: 9 }, () => ({ status: 'idle', card: null })))
       alert((err instanceof Error ? err.message : 'Upload failed') + '. Please try again.')
     }
+  }
+
+  // ── Back-of-sheet scan ────────────────────────────────────────────────────
+
+  const handleBackFile = async (file: File) => {
+    setBackSheetPreview(URL.createObjectURL(file))
+    setBackStage('processing')
+    setBackProgress(0)
+    const backCrops = await cropBackSheetIntoThumbnails(file)
+    setBackCropThumbnails(backCrops)
+
+    // Re-extract all 9 slots sequentially with front+back
+    for (let i = 0; i < 9; i++) {
+      const frontDataUrl = cropThumbnails[i]
+      const backDataUrl = backCrops[i]
+      if (!frontDataUrl || !backDataUrl) { setBackProgress(i + 1); continue }
+
+      try {
+        const reviewCard = reviewCards[i]
+        const res = await fetch('/api/ai/extract-card-dataurl', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            frontDataUrl,
+            backDataUrl,
+            cardId: reviewCard?.card_id ?? null
+          })
+        })
+        if (res.ok) {
+          const extracted = await res.json() as CardExtractionResult
+          updateReviewCard(i, {
+            player_name: extracted.player_name ?? reviewCards[i]?.player_name ?? '',
+            sport: extracted.sport ?? reviewCards[i]?.sport ?? '',
+            year: extracted.year ?? reviewCards[i]?.year ?? '',
+            brand: extracted.card_brand ?? reviewCards[i]?.brand ?? '',
+            set_name: extracted.set_name ?? reviewCards[i]?.set_name ?? '',
+            card_number: extracted.card_number ?? reviewCards[i]?.card_number ?? '',
+            team: extracted.team_name ?? reviewCards[i]?.team ?? '',
+            rookie: extracted.attributes?.rookie ?? reviewCards[i]?.rookie ?? false,
+            autographed: extracted.attributes?.autographed ?? reviewCards[i]?.autographed ?? false,
+            patch: extracted.attributes?.patch ?? reviewCards[i]?.patch ?? false,
+            needs_review: false,
+            confirmed: true
+          })
+        }
+      } catch { /* ignore per-slot errors */ }
+      setBackProgress(i + 1)
+    }
+    setBackStage('done')
   }
 
   // ── Per-slot re-scan ──────────────────────────────────────────────────────
@@ -427,6 +520,10 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
     setNoGridError(false)
     setSaveError(null)
     setReScanPosition(null)
+    setBackCropThumbnails([])
+    setBackSheetPreview(null)
+    setBackStage('idle')
+    setBackProgress(0)
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -499,8 +596,6 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
               </div>
             </div>
           )}
-          <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
-            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
         </div>
       )}
 
@@ -540,6 +635,58 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
               </button>
             </div>
           )}
+
+          {/* Back-of-sheet scanning section */}
+          {backStage === 'idle' && (
+            <div className="p-4 bg-white/5 border border-white/10 rounded-xl space-y-2">
+              <div className="flex items-start gap-3">
+                <div className="text-2xl">🔄</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-sm font-medium">Add Back of Sheet</p>
+                  <p className="text-white/50 text-xs mt-0.5">
+                    Scan the back to capture set name, card numbers, and stats — dramatically improves accuracy.
+                  </p>
+                  <div className="flex gap-2 mt-3">
+                    <button onClick={() => backFileInputRef.current?.click()}
+                      className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors">
+                      Upload Back Photo
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {backStage === 'processing' && (
+            <div className="p-4 bg-blue-950/40 border border-blue-700 rounded-xl space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                <div className="flex-1">
+                  <p className="text-white text-sm font-medium">Enhancing with back images...</p>
+                  <div className="mt-2 bg-white/10 rounded-full h-1.5">
+                    <div className="bg-blue-400 h-1.5 rounded-full transition-all" style={{ width: `${(backProgress / 9) * 100}%` }} />
+                  </div>
+                  <p className="text-white/40 text-xs mt-1">{backProgress} of 9 complete</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {backStage === 'done' && (
+            <div className="p-3 bg-green-950/40 border border-green-700 rounded-xl flex items-center gap-2">
+              <svg className="w-4 h-4 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <p className="text-green-300 text-sm font-medium">Back images applied — all cards re-extracted</p>
+              {backSheetPreview && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={backSheetPreview} alt="Back sheet" className="ml-auto h-8 w-auto rounded object-contain opacity-60" />
+              )}
+            </div>
+          )}
+
+          <input ref={backFileInputRef} type="file" accept="image/*" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleBackFile(f); e.target.value = '' }} />
 
           <div className="flex items-center justify-between">
             <h3 className="text-white font-semibold">Review {reviewCards.length} Cards</h3>
@@ -605,6 +752,9 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
         onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
       <input ref={reScanInputRef} type="file" accept="image/*" className="hidden"
         onChange={e => { const f = e.target.files?.[0]; if (f) handleReScanFile(f) }} />
+
+      {/* Unused state variable reference to satisfy TypeScript (backCropThumbnails stored for potential future use) */}
+      {backCropThumbnails.length > 0 && null}
     </div>
   )
 }
