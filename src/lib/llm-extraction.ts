@@ -498,49 +498,62 @@ export async function smartCardVisionExtraction(
 // Sheet / batch extraction — 3×3 binder page in a single API call
 // ────────────────────────────────────────────────────────────────────────────
 
-const sheetVisionSystemPrompt = `You are an expert sports card identifier with deep knowledge of trading cards across all sports and eras.
+const sheetVisionSystemPrompt = `You are an expert sports card identifier with encyclopedic knowledge of trading cards across all sports, brands, sets, and eras.
 
-You will receive an image of a 3×3 binder page (or a flat sheet of 9 trading cards arranged in 3 columns and 3 rows).
+You will receive a HIGH-RESOLUTION image of a 3×3 binder page — nine trading card pockets arranged in 3 columns × 3 rows. Each pocket shows the front of one card.
 
-STEP 1 — GRID DETECTION:
-First, assess whether the image contains a recognizable 3×3 grid of trading cards. If the image does NOT contain a clear 3×3 layout of cards, return ONLY:
-{ "grid_detected": false, "cards": [] }
+════════════════════════════════════
+STEP 1 — GRID DETECTION
+════════════════════════════════════
+Confirm the image contains a 3×3 layout of trading cards.
+If NOT, return ONLY: { "grid_detected": false, "cards": [] }
 
-STEP 2 — CELL EXTRACTION (only if grid detected):
-Process each of the 9 cells independently, as if each were a standalone card photo.
-Cells are numbered row-major starting from the top-left:
-  0=top-left    1=top-center    2=top-right
-  3=middle-left 4=middle-center 5=middle-right
-  6=bottom-left 7=bottom-center 8=bottom-right
+════════════════════════════════════
+STEP 2 — PER-CELL READING STRATEGY
+════════════════════════════════════
+Work left-to-right, top-to-bottom (row-major). Treat each pocket as an independent close-up:
 
-For each cell extract:
-{
-  "year": "YYYY",
-  "player_name": "Full Name",
-  "team_name": "Full Team Name (not abbreviations)",
-  "position": "Position",
-  "sport": "Sport Name",
-  "set_name": "Set Name",
-  "card_brand": "Brand",
-  "card_number": "Number in set (NOT player jersey number)",
-  "attributes": {
-    "rookie": boolean,
-    "autographed": boolean,
-    "patch": boolean
-  },
-  "confidence": 0.0-1.0,
-  "raw_ocr_text": "All visible text from this cell"
-}
+  Position map:
+  ┌───┬───┬───┐
+  │ 0 │ 1 │ 2 │  ← top row
+  ├───┼───┼───┤
+  │ 3 │ 4 │ 5 │  ← middle row
+  ├───┼───┼───┤
+  │ 6 │ 7 │ 8 │  ← bottom row
+  └───┴───┴───┘
 
-CONFIDENCE RULES:
-- Set "confidence" >= 0.8 and assign confidence_level "high" when player name, sport, and year are clearly legible.
-- Set "confidence" 0.5–0.79 → "medium". Set "confidence" < 0.5 → "low".
-- Any cell where you are uncertain → set needs_review: true.
-- Empty pockets / blank slots → card: null, confidence_level: "low", needs_review: true.
-- Do NOT hallucinate card data. If a field is unclear, omit it.
-- Partial recognition is acceptable — flag rather than guess.
+For EACH cell, zoom in mentally and read every visible character carefully:
+• PLAYER NAME — typically the largest text on the card front; read each letter individually if needed
+• TEAM NAME — full name, never abbreviations (e.g., "Buffalo Sabres" not "BUF")
+• YEAR — look for season format like "2023-24" → output "2023"; also check set/brand text for copyright year
+• SET NAME — printed on the card front or in the border/footer area (e.g., "Upper Deck Series 1", "Topps Chrome")
+• CARD BRAND — the manufacturer (Upper Deck, Panini, Topps, O-Pee-Chee, Donruss, Fleer, Score, Leaf, etc.)
+• CARD NUMBER — the number in the SET printed on the front bottom or back corner — NOT the player's jersey number
+• SPORT — infer from team, player, or card design if not explicit
+• POSITION — printed on card front; common abbreviations: C, LW, RW, D (hockey), QB, RB, WR (football), etc.
+• raw_ocr_text — transcribe EVERY character you can read from the cell: player, team, set, brand, logos, copyright, stats snippets, watermarks, serial numbers
 
-RETURN a JSON object with EXACTLY this shape (9 entries, positions 0–8):
+ATTRIBUTE DETECTION (per cell):
+• rookie: true if you see RC, ROOKIE, or it's clearly a player's first-year card
+• autographed: true if AUTO, AUTOGRAPH, or a visible on-card signature is present
+• patch: true if PATCH, JERSEY, GAME-USED, MATERIAL, SWATCH, RELIC, Rookie Ticket, Contenders ticket-stub layout, or any embedded material window
+
+CONFIDENCE SCORING:
+• 0.8–1.0 → "high"   (player name + at least 2 other fields clearly legible)
+• 0.5–0.79 → "medium" (player name legible but other details uncertain)
+• 0.0–0.49 → "low"   (even player name uncertain or pocket is empty)
+• needs_review: true whenever confidence < 0.8, or ANY key field was guessed rather than clearly read
+• Empty / blank pockets → card: null, confidence: "low", needs_review: true
+• NEVER invent or hallucinate data. Omit a field entirely rather than guess.
+
+CARD NUMBER vs JERSEY NUMBER:
+"card_number" is the card's catalog number within its set (e.g., "#147", "RC-23"). It is NOT the player's uniform/jersey number. Look for small set-numbering text, typically at the bottom front or in a corner badge.
+
+════════════════════════════════════
+REQUIRED OUTPUT FORMAT (strict JSON)
+════════════════════════════════════
+Return ONLY a JSON object — no prose, no markdown fences — with exactly this structure and exactly 9 entries:
+
 {
   "grid_detected": true,
   "cards": [
@@ -548,13 +561,23 @@ RETURN a JSON object with EXACTLY this shape (9 entries, positions 0–8):
       "position": 0,
       "confidence": "high" | "medium" | "low",
       "needs_review": boolean,
-      "card": { ...card fields above... } | null
-    },
-    ... (exactly 9 entries)
+      "card": {
+        "year": "YYYY",
+        "player_name": "Full Name",
+        "team_name": "Full Team Name",
+        "position": "Position",
+        "sport": "Sport Name",
+        "set_name": "Set Name",
+        "card_brand": "Brand",
+        "card_number": "Set catalog number",
+        "attributes": { "rookie": boolean, "autographed": boolean, "patch": boolean },
+        "confidence": 0.0-1.0,
+        "raw_ocr_text": "every character you can read from this cell"
+      }
+    }
+    ... (positions 1 through 8)
   ]
-}
-
-Do not include any text before or after the JSON object.`
+}`
 
 /**
  * Single GPT-4o Vision call: one 3×3 sheet image → structured data for all 9 positions.
@@ -564,7 +587,7 @@ export async function smartSheetVisionExtraction(
   sheetDataUrl: string,
   options: LLMExtractionOptions = {}
 ): Promise<SheetExtractionResult> {
-  const { model = 'gpt-4o', temperature = 0.1, maxTokens = 4000 } = options
+  const { model = 'gpt-4o', temperature = 0.1, maxTokens = 6000 } = options
 
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('OpenAI API key not configured.')
@@ -587,7 +610,7 @@ export async function smartSheetVisionExtraction(
               type: 'text',
               text: 'This image shows a 3×3 binder page or sheet of trading cards. Extract all 9 card positions as instructed.'
             },
-            { type: 'image_url', image_url: { url: sheetDataUrl } }
+            { type: 'image_url', image_url: { url: sheetDataUrl, detail: 'high' } }
           ]
         }
       ],
