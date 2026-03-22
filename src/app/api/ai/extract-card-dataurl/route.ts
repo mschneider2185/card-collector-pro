@@ -68,72 +68,126 @@ export async function POST(request: NextRequest) {
       backDataUrl: backDataUrl || null
     })
 
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    const supabase = createClient(supabaseUrl, serviceRoleKey)
+
+    const c = result
+    const parsedYear = c.year ? parseInt(c.year, 10) : null
+
+    const cardPayload: Record<string, unknown> = {
+      sport: c.sport ?? null,
+      year: parsedYear !== null && Number.isFinite(parsedYear) ? parsedYear : null,
+      brand: c.card_brand ?? null,
+      series: c.set_name ?? null,
+      set_number: c.set_name ?? null,
+      card_number: c.card_number ?? null,
+      player_name: c.player_name ?? null,
+      team: c.team_name ?? null,
+      position: c.position ?? null,
+      confidence_score: c.confidence ?? null,
+      ocr_text: c.raw_ocr_text ?? null,
+      rookie: c.attributes?.rookie ?? false,
+      autographed: c.attributes?.autographed ?? false,
+      patch: c.attributes?.patch ?? false,
+      last_updated: new Date().toISOString()
+    }
+
+    let resolvedCardId = cardId ?? null
+
+    // Upload back image if available (needs a card ID first)
+    let backImageUrl: string | null = null
+
     if (cardId) {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-      const supabase = createClient(supabaseUrl, serviceRoleKey)
-
-      const c = result
-      const parsedYear = c.year ? parseInt(c.year, 10) : null
-
-      // Upload back image to card-images/card-backs/{cardId}.jpg
-      let backImageUrl: string | null = null
+      // Update existing card
       if (backDataUrl?.startsWith('data:')) {
         try {
           const ext = backDataUrl.startsWith('data:image/png') ? 'png' : 'jpg'
           backImageUrl = await uploadDataUrlToStorage(
-            supabaseUrl,
-            serviceRoleKey,
-            backDataUrl,
+            supabaseUrl, serviceRoleKey, backDataUrl,
             `card-backs/${cardId}.${ext}`
           )
         } catch (uploadErr) {
           console.error('[extract-card-dataurl] back image upload failed:', uploadErr)
         }
       }
-
-      const updatePayload: Record<string, unknown> = {
-        sport: c.sport ?? null,
-        year: parsedYear !== null && Number.isFinite(parsedYear) ? parsedYear : null,
-        brand: c.card_brand ?? null,
-        series: c.set_name ?? null,
-        set_number: c.set_name ?? null,
-        card_number: c.card_number ?? null,
-        player_name: c.player_name ?? null,
-        team: c.team_name ?? null,
-        position: c.position ?? null,
-        confidence_score: c.confidence ?? null,
-        ocr_text: c.raw_ocr_text ?? null,
-        rookie: c.attributes?.rookie ?? false,
-        autographed: c.attributes?.autographed ?? false,
-        patch: c.attributes?.patch ?? false,
-        last_updated: new Date().toISOString()
-      }
-
-      if (backImageUrl) {
-        updatePayload.back_image_url = backImageUrl
-      }
+      if (backImageUrl) cardPayload.back_image_url = backImageUrl
 
       const { error: dbError } = await supabase
         .from('cards')
-        .update(updatePayload)
+        .update(cardPayload)
         .eq('id', cardId)
+      if (dbError) console.error('[extract-card-dataurl] DB update failed:', dbError)
+    } else if (c.player_name) {
+      // No existing card ID — upsert a new card record so it can be saved to collection
+      // Upload front image first
+      let frontImageUrl: string | null = null
+      try {
+        const tmpId = crypto.randomUUID()
+        frontImageUrl = await uploadDataUrlToStorage(
+          supabaseUrl, serviceRoleKey, frontDataUrl,
+          `batch-crops/${tmpId}-front.jpg`
+        )
+      } catch { /* non-fatal */ }
 
-      if (dbError) {
-        console.error('[extract-card-dataurl] DB update failed:', dbError)
+      if (frontImageUrl) {
+        cardPayload.image_url = frontImageUrl
+        cardPayload.front_image_url = frontImageUrl
       }
 
-      // Include backImageSaved flag so the client can log if back image persistence failed
-      return new Response(
-        JSON.stringify({ ...result, backImageSaved: !!backImageUrl }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      )
+      // Dedup: check if card already exists
+      const { data: existing } = await supabase
+        .from('cards')
+        .select('id')
+        .eq('sport', cardPayload.sport)
+        .eq('year', cardPayload.year)
+        .eq('brand', cardPayload.brand)
+        .eq('player_name', cardPayload.player_name)
+        .eq('card_number', cardPayload.card_number)
+        .maybeSingle()
+
+      if (existing) {
+        resolvedCardId = existing.id
+        const { error: dbError } = await supabase
+          .from('cards')
+          .update(cardPayload)
+          .eq('id', existing.id)
+        if (dbError) console.error('[extract-card-dataurl] DB update (dedup) failed:', dbError)
+      } else {
+        const { data: inserted, error: insertErr } = await supabase
+          .from('cards')
+          .insert(cardPayload)
+          .select('id')
+          .single()
+        if (insertErr) console.error('[extract-card-dataurl] DB insert failed:', insertErr)
+        resolvedCardId = inserted?.id ?? null
+      }
+
+      // Now upload back image with the resolved card ID
+      if (resolvedCardId && backDataUrl?.startsWith('data:')) {
+        try {
+          const ext = backDataUrl.startsWith('data:image/png') ? 'png' : 'jpg'
+          backImageUrl = await uploadDataUrlToStorage(
+            supabaseUrl, serviceRoleKey, backDataUrl,
+            `card-backs/${resolvedCardId}.${ext}`
+          )
+          if (backImageUrl) {
+            await supabase.from('cards').update({ back_image_url: backImageUrl }).eq('id', resolvedCardId)
+          }
+        } catch (uploadErr) {
+          console.error('[extract-card-dataurl] back image upload failed:', uploadErr)
+        }
+      }
     }
 
-    return new Response(JSON.stringify(result), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    })
+    return new Response(
+      JSON.stringify({
+        ...result,
+        card_id: resolvedCardId,
+        backImageSaved: !!backImageUrl
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    )
   } catch (error) {
     console.error('extract-card-dataurl error:', error)
     const message = error instanceof Error ? error.message : 'Unknown error'

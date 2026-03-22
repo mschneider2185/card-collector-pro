@@ -887,6 +887,40 @@ export async function batchExtractCroppedCards(
     })) }
   }
 
+  // Batch-specific system prompt: instructs the model to return an ARRAY of cards,
+  // NOT a single flat object like visionCardSystemPrompt does.
+  const batchSystemPrompt = `You are an expert sports card identifier. You will receive multiple trading card images, each labeled with a position number (0–8).
+
+For EACH image, extract the card's data independently. Return a JSON object:
+{
+  "cards": [
+    {
+      "position": 0,
+      "player_name": "Full Name",
+      "team_name": "Full Team Name",
+      "position_played": "Position",
+      "sport": "Sport Name",
+      "year": "YYYY",
+      "set_name": "Set Name",
+      "card_brand": "Brand",
+      "card_number": "Number",
+      "attributes": { "rookie": false, "autographed": false, "patch": false },
+      "confidence": 0.0-1.0,
+      "raw_ocr_text": "all visible text"
+    }
+  ]
+}
+
+Rules:
+- "position" is the index label shown before the image (0–8), NOT the player's field position
+- "card_number" is the card's number IN THE SET (from back/corner), NOT the player's jersey number
+- Team names: full names (e.g., "New York Yankees" not "NYY")
+- Year: copyright/season year, e.g., "2023-24" → "2023"
+- Rookie: RC, ROOKIE indicators → "rookie": true
+- Patch: only true for actual game-used material, jersey swatch, relic, fabric embed
+- Return exactly one entry per image provided
+- Do not include any text before or after the JSON object.`
+
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -896,7 +930,7 @@ export async function batchExtractCroppedCards(
     body: JSON.stringify({
       model,
       messages: [
-        { role: 'system', content: visionCardSystemPrompt },
+        { role: 'system', content: batchSystemPrompt },
         { role: 'user', content: userContent }
       ],
       temperature,
@@ -916,7 +950,23 @@ export async function batchExtractCroppedCards(
 
   let raw: { grid_detected?: boolean; cards?: Array<Record<string, unknown>> }
   try {
-    raw = parseModelJsonObject(content) as typeof raw
+    const parsed = parseModelJsonObject(content) as Record<string, unknown>
+    // Handle two possible response shapes:
+    // 1. { cards: [...] } — expected batch format
+    // 2. [ {...}, {...} ] — array without wrapper (some models do this)
+    if (Array.isArray(parsed)) {
+      raw = { cards: parsed as Array<Record<string, unknown>> }
+    } else if (Array.isArray(parsed.cards)) {
+      raw = parsed as typeof raw
+    } else {
+      // Single flat object returned (model ignored batch instruction) —
+      // treat as position 0 if it has player_name
+      if (parsed.player_name) {
+        raw = { cards: [{ ...parsed, position: includedPositions[0] ?? 0 }] }
+      } else {
+        raw = { cards: [] }
+      }
+    }
   } catch {
     console.error('Failed to parse batch extraction response:', content)
     throw new Error('Invalid JSON response from batch extraction model')
@@ -940,7 +990,7 @@ export async function batchExtractCroppedCards(
           year: cardSource.year as string | undefined,
           player_name: cardSource.player_name as string | undefined,
           team_name: cardSource.team_name as string | undefined,
-          position: cardSource.position as string | undefined,
+          position: (cardSource.position_played ?? cardSource.position) as string | undefined,
           sport: cardSource.sport as string | undefined,
           set_name: cardSource.set_name as string | undefined,
           card_brand: cardSource.card_brand as string | undefined,

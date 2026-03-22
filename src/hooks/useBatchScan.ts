@@ -191,14 +191,14 @@ export function useBatchScan(userId: string) {
         console.warn(`[batchScan] Only ${quadSuccessCount}/9 quads valid — falling back to POCKET_GRID`)
         const POCKET_GRID = {
           cols: [
-            { start: 0.035, end: 0.315 },
-            { start: 0.350, end: 0.650 },
-            { start: 0.685, end: 0.965 },
+            { start: 0.020, end: 0.320 },
+            { start: 0.340, end: 0.660 },
+            { start: 0.680, end: 0.980 },
           ],
           rows: [
-            { start: 0.025, end: 0.315 },
-            { start: 0.345, end: 0.655 },
-            { start: 0.685, end: 0.975 },
+            { start: 0.015, end: 0.325 },
+            { start: 0.340, end: 0.660 },
+            { start: 0.675, end: 0.990 },
           ],
         }
 
