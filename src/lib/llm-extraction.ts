@@ -1,4 +1,4 @@
-import type { CardExtractionResult, BatchCardPosition, SheetExtractionResult } from '@/types'
+import type { CardExtractionResult, BatchCardPosition, SheetExtractionResult, DetectionResult, CardQuad } from '@/types'
 
 export interface LLMExtractionOptions {
   model?: 'gpt-4o-mini' | 'gpt-4o' | 'claude-3-sonnet'
@@ -676,4 +676,312 @@ export async function smartSheetVisionExtraction(
   positions.sort((a, b) => a.position - b.position)
 
   return { grid_detected: true, cards: positions }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Two-phase pipeline: Detection-only + Batch extraction of cropped cards
+// ────────────────────────────────────────────────────────────────────────────
+
+const detectionSystemPrompt = `You are a bounding-box detector for a 3×3 trading card binder page.
+The image shows 9 card pockets in a 3-column × 3-row layout.
+For each pocket (positions 0–8, row-major: 0=top-left, 8=bottom-right),
+return the four corner pixel coordinates of the card or sleeve boundary.
+Corners: top-left, top-right, bottom-right, bottom-left.
+DO NOT read any card text. DO NOT extract any card data.
+Return ONLY this JSON, nothing else:
+{
+  "grid_detected": boolean,
+  "positions": [
+    {
+      "index": 0,
+      "quad": [[x,y],[x,y],[x,y],[x,y]],
+      "confidence": "high" | "medium" | "low",
+      "empty": boolean
+    }
+  ]
+}
+If the image does not contain a 3×3 grid, return:
+{ "grid_detected": false, "positions": [] }`
+
+/**
+ * Validate that a quad is a reasonable card shape within the image bounds.
+ * Checks area, aspect ratio, convexity, and bounds.
+ */
+export function validateQuad(
+  quad: [[number, number], [number, number], [number, number], [number, number]],
+  imageWidth: number,
+  imageHeight: number
+): boolean {
+  // Check all coordinates are within image bounds
+  for (const [x, y] of quad) {
+    if (x < 0 || x > imageWidth || y < 0 || y > imageHeight) return false
+  }
+
+  // Calculate area using shoelace formula
+  const totalArea = imageWidth * imageHeight
+  let area = 0
+  for (let i = 0; i < 4; i++) {
+    const [x1, y1] = quad[i]
+    const [x2, y2] = quad[(i + 1) % 4]
+    area += x1 * y2 - x2 * y1
+  }
+  area = Math.abs(area) / 2
+
+  // Area must be >= 3% of total image area
+  if (area < totalArea * 0.03) return false
+
+  // Compute width and height from the quad edges
+  const dx01 = quad[1][0] - quad[0][0]
+  const dy01 = quad[1][1] - quad[0][1]
+  const topEdge = Math.sqrt(dx01 * dx01 + dy01 * dy01)
+
+  const dx03 = quad[3][0] - quad[0][0]
+  const dy03 = quad[3][1] - quad[0][1]
+  const leftEdge = Math.sqrt(dx03 * dx03 + dy03 * dy03)
+
+  // Aspect ratio = width / height — card should be ~0.55 to 0.85
+  const aspect = topEdge / (leftEdge || 1)
+  if (aspect < 0.55 || aspect > 0.85) return false
+
+  // Check convexity: verify all cross products have the same sign
+  const crosses: number[] = []
+  for (let i = 0; i < 4; i++) {
+    const [ax, ay] = quad[i]
+    const [bx, by] = quad[(i + 1) % 4]
+    const [cx, cy] = quad[(i + 2) % 4]
+    crosses.push((bx - ax) * (cy - by) - (by - ay) * (cx - bx))
+  }
+  const allPositive = crosses.every(c => c > 0)
+  const allNegative = crosses.every(c => c < 0)
+  if (!allPositive && !allNegative) return false
+
+  return true
+}
+
+/**
+ * Single GPT-4o call: detect bounding quadrilaterals for all 9 card positions.
+ * Returns only geometry — no text extraction.
+ */
+export async function detectCardQuads(
+  sheetDataUrl: string,
+  options: LLMExtractionOptions = {}
+): Promise<DetectionResult> {
+  const { model = 'gpt-4o', temperature = 0.1 } = options
+
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OpenAI API key not configured.')
+  }
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: detectionSystemPrompt },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Detect the 9 card pocket positions in this 3×3 binder page image. Return bounding quads only.'
+            },
+            { type: 'image_url', image_url: { url: sheetDataUrl, detail: 'high' } }
+          ]
+        }
+      ],
+      temperature,
+      max_tokens: 800
+    })
+  })
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(
+      `OpenAI API error: ${response.status} ${response.statusText} - ${(err as { error?: { message?: string } }).error?.message || 'Unknown error'}`
+    )
+  }
+
+  const result = await response.json()
+  const content = (result as { choices: Array<{ message: { content: string } }> }).choices[0].message.content.trim()
+
+  let raw: { grid_detected: boolean; positions: Array<Record<string, unknown>> }
+  try {
+    raw = parseModelJsonObject(content) as typeof raw
+  } catch {
+    console.error('Failed to parse detection response:', content)
+    throw new Error('Invalid JSON response from detection model')
+  }
+
+  if (!raw.grid_detected) {
+    return { grid_detected: false, positions: [] }
+  }
+
+  const positions: CardQuad[] = (raw.positions ?? []).map(p => ({
+    index: typeof p.index === 'number' ? p.index : 0,
+    quad: p.quad as CardQuad['quad'],
+    confidence: (p.confidence as CardQuad['confidence']) ?? 'low',
+    empty: Boolean(p.empty),
+    valid: true // will be validated client-side with validateQuad
+  }))
+
+  // Pad missing positions
+  const seen = new Set(positions.map(p => p.index))
+  for (let i = 0; i < 9; i++) {
+    if (!seen.has(i)) {
+      positions.push({
+        index: i,
+        quad: [[0, 0], [0, 0], [0, 0], [0, 0]],
+        confidence: 'low',
+        empty: true,
+        valid: false
+      })
+    }
+  }
+
+  positions.sort((a, b) => a.index - b.index)
+
+  return { grid_detected: true, positions }
+}
+
+/**
+ * Batch extraction: send multiple cropped card images in a single GPT-4o call.
+ * Each image is a clean, deskewed card crop from the perspective warp step.
+ * Returns SheetExtractionResult with 9 entries padded.
+ */
+export async function batchExtractCroppedCards(
+  croppedDataUrls: (string | null)[],
+  options: LLMExtractionOptions = {}
+): Promise<SheetExtractionResult> {
+  const { model = 'gpt-4o', temperature = 0.1, maxTokens = 5000 } = options
+
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OpenAI API key not configured.')
+  }
+
+  // Build multi-image message content
+  const userContent: Array<
+    { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail?: string } }
+  > = [
+    {
+      type: 'text',
+      text: 'The following images are individual card crops from a 3×3 binder page. Each is labeled with its position index (0–8, row-major). Extract card data for each one. Return a JSON object with "grid_detected": true and "cards" array with exactly one entry per provided image, following the position index shown.'
+    }
+  ]
+
+  const includedPositions: number[] = []
+  for (let i = 0; i < 9; i++) {
+    const dataUrl = croppedDataUrls[i]
+    if (!dataUrl) continue
+    includedPositions.push(i)
+    userContent.push({ type: 'text', text: `--- Position ${i} ---` })
+    userContent.push({ type: 'image_url', image_url: { url: dataUrl, detail: 'high' } })
+  }
+
+  if (includedPositions.length === 0) {
+    return { grid_detected: true, cards: Array.from({ length: 9 }, (_, i) => ({
+      position: i, confidence: 'low' as const, needs_review: true, card: null
+    })) }
+  }
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: visionCardSystemPrompt },
+        { role: 'user', content: userContent }
+      ],
+      temperature,
+      max_tokens: maxTokens
+    })
+  })
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(
+      `OpenAI API error: ${response.status} ${response.statusText} - ${(err as { error?: { message?: string } }).error?.message || 'Unknown error'}`
+    )
+  }
+
+  const result = await response.json()
+  const content = (result as { choices: Array<{ message: { content: string } }> }).choices[0].message.content.trim()
+
+  let raw: { grid_detected?: boolean; cards?: Array<Record<string, unknown>> }
+  try {
+    raw = parseModelJsonObject(content) as typeof raw
+  } catch {
+    console.error('Failed to parse batch extraction response:', content)
+    throw new Error('Invalid JSON response from batch extraction model')
+  }
+
+  // Normalise and pad to exactly 9 positions
+  const seen = new Set<number>()
+  const cards: BatchCardPosition[] = []
+
+  for (const entry of raw.cards ?? []) {
+    const pos = typeof entry.position === 'number' ? entry.position : -1
+    if (pos < 0 || pos > 8 || seen.has(pos)) continue
+    seen.add(pos)
+
+    const rawCard = entry.card as Record<string, unknown> | null
+    // If the model returned flat fields (no nested .card), treat the entry itself as card data
+    const cardSource = rawCard ?? (entry.player_name ? entry : null) as Record<string, unknown> | null
+
+    const cardData: CardExtractionResult | null = cardSource
+      ? {
+          year: cardSource.year as string | undefined,
+          player_name: cardSource.player_name as string | undefined,
+          team_name: cardSource.team_name as string | undefined,
+          position: cardSource.position as string | undefined,
+          sport: cardSource.sport as string | undefined,
+          set_name: cardSource.set_name as string | undefined,
+          card_brand: cardSource.card_brand as string | undefined,
+          card_number: cardSource.card_number as string | undefined,
+          attributes: cardSource.attributes as CardExtractionResult['attributes'],
+          confidence: typeof cardSource.confidence === 'number' ? cardSource.confidence : undefined,
+          raw_ocr_text: cardSource.raw_ocr_text as string | undefined
+        }
+      : null
+
+    // Post-process patch detection
+    const processedCard =
+      cardData && cardData.raw_ocr_text
+        ? postProcessPatchDetection(cardData, cardData.raw_ocr_text)
+        : cardData
+
+    const confidenceNum = processedCard?.confidence ?? 0
+    const confidenceLabel: 'high' | 'medium' | 'low' =
+      confidenceNum >= 0.8 ? 'high' : confidenceNum >= 0.5 ? 'medium' : 'low'
+
+    cards.push({
+      position: pos,
+      confidence: (entry.confidence as 'high' | 'medium' | 'low') ?? confidenceLabel,
+      needs_review: Boolean(entry.needs_review) || confidenceLabel === 'low' || !processedCard,
+      card: processedCard
+    })
+  }
+
+  // Pad missing positions with null entries
+  for (let i = 0; i < 9; i++) {
+    if (!seen.has(i)) {
+      cards.push({
+        position: i,
+        confidence: 'low',
+        needs_review: true,
+        card: null
+      })
+    }
+  }
+
+  cards.sort((a, b) => a.position - b.position)
+
+  return { grid_detected: true, cards }
 }

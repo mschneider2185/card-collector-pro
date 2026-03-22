@@ -171,3 +171,204 @@ export function extractColorPalette(_imageUrl: string): Promise<string[]> {
   // Mock implementation - would analyze dominant colors
   return Promise.resolve(['#1f2937', '#3b82f6', '#ef4444', '#10b981'])
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Perspective correction for 3×3 sheet scanning pipeline
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Load a data URL into an HTMLCanvasElement.
+ */
+export function sheetImageToCanvas(dataUrl: string): Promise<HTMLCanvasElement> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(img, 0, 0)
+      resolve(canvas)
+    }
+    img.onerror = () => reject(new Error('Failed to load sheet image'))
+    img.src = dataUrl
+  })
+}
+
+/**
+ * Perspective-warp a quadrilateral region from sourceCanvas into a clean
+ * rectangular card image using Canvas 2D and manual bilinear sampling.
+ *
+ * @param sourceCanvas  The full sheet image loaded into a canvas
+ * @param quad          4 corner points [TL, TR, BR, BL] in source pixel coords
+ * @param outputWidth   Desired output width  (default 300)
+ * @param outputHeight  Desired output height (default 420)
+ */
+export function warpCardToRect(
+  sourceCanvas: HTMLCanvasElement,
+  quad: [[number, number], [number, number], [number, number], [number, number]],
+  outputWidth: number = 300,
+  outputHeight: number = 420
+): HTMLCanvasElement {
+  const outCanvas = document.createElement('canvas')
+  outCanvas.width = outputWidth
+  outCanvas.height = outputHeight
+  const outCtx = outCanvas.getContext('2d')!
+
+  const srcCtx = sourceCanvas.getContext('2d')!
+  const srcData = srcCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height)
+  const srcPixels = srcData.data
+  const srcW = sourceCanvas.width
+  const srcH = sourceCanvas.height
+
+  const outImageData = outCtx.createImageData(outputWidth, outputHeight)
+  const outPixels = outImageData.data
+
+  // Compute the INVERSE homography: maps destination coords -> source coords
+  // We need: for each (dx, dy) in output, find (sx, sy) in source
+  // So we compute homography from destination rect to source quad
+  const dstCorners: [[number, number], [number, number], [number, number], [number, number]] = [
+    [0, 0],
+    [outputWidth, 0],
+    [outputWidth, outputHeight],
+    [0, outputHeight]
+  ]
+
+  // Compute homography: dst -> src
+  // We reuse computeHomography but swap the roles: map dst corners to src quad
+  const h = computeHomographyGeneral(dstCorners, quad)
+
+  // For each output pixel, find the source coordinate and bilinear sample
+  for (let dy = 0; dy < outputHeight; dy++) {
+    for (let dx = 0; dx < outputWidth; dx++) {
+      // Apply homography: [sx, sy, sw] = H * [dx, dy, 1]
+      const sw = h[6] * dx + h[7] * dy + 1
+      const sx = (h[0] * dx + h[1] * dy + h[2]) / sw
+      const sy = (h[3] * dx + h[4] * dy + h[5]) / sw
+
+      // Bilinear interpolation
+      const outIdx = (dy * outputWidth + dx) * 4
+
+      if (sx < 0 || sx >= srcW - 1 || sy < 0 || sy >= srcH - 1) {
+        // Out of bounds — black
+        outPixels[outIdx] = 0
+        outPixels[outIdx + 1] = 0
+        outPixels[outIdx + 2] = 0
+        outPixels[outIdx + 3] = 255
+        continue
+      }
+
+      const x0 = Math.floor(sx)
+      const y0 = Math.floor(sy)
+      const fx = sx - x0
+      const fy = sy - y0
+
+      const i00 = (y0 * srcW + x0) * 4
+      const i10 = (y0 * srcW + x0 + 1) * 4
+      const i01 = ((y0 + 1) * srcW + x0) * 4
+      const i11 = ((y0 + 1) * srcW + x0 + 1) * 4
+
+      for (let c = 0; c < 4; c++) {
+        const v =
+          srcPixels[i00 + c] * (1 - fx) * (1 - fy) +
+          srcPixels[i10 + c] * fx * (1 - fy) +
+          srcPixels[i01 + c] * (1 - fx) * fy +
+          srcPixels[i11 + c] * fx * fy
+        outPixels[outIdx + c] = Math.round(v)
+      }
+    }
+  }
+
+  outCtx.putImageData(outImageData, 0, 0)
+  return outCanvas
+}
+
+/**
+ * General homography computation: maps 4 source points to 4 destination points.
+ * Returns [a,b,c,d,e,f,g,h] where the 3×3 matrix is [[a,b,c],[d,e,f],[g,h,1]].
+ */
+function computeHomographyGeneral(
+  src: [[number, number], [number, number], [number, number], [number, number]],
+  dst: [[number, number], [number, number], [number, number], [number, number]]
+): number[] {
+  const A: number[][] = []
+  const b_vec: number[] = []
+
+  for (let i = 0; i < 4; i++) {
+    const [x, y] = src[i]
+    const [X, Y] = dst[i]
+
+    A.push([x, y, 1, 0, 0, 0, -X * x, -X * y])
+    b_vec.push(X)
+
+    A.push([0, 0, 0, x, y, 1, -Y * x, -Y * y])
+    b_vec.push(Y)
+  }
+
+  const n = 8
+  const augmented = A.map((row, i) => [...row, b_vec[i]])
+
+  for (let col = 0; col < n; col++) {
+    let maxVal = Math.abs(augmented[col][col])
+    let maxRow = col
+    for (let row = col + 1; row < n; row++) {
+      const v = Math.abs(augmented[row][col])
+      if (v > maxVal) {
+        maxVal = v
+        maxRow = row
+      }
+    }
+    if (maxRow !== col) {
+      const tmp = augmented[col]
+      augmented[col] = augmented[maxRow]
+      augmented[maxRow] = tmp
+    }
+
+    const pivot = augmented[col][col]
+    if (Math.abs(pivot) < 1e-12) {
+      return [1, 0, 0, 0, 1, 0, 0, 0]
+    }
+
+    for (let row = col + 1; row < n; row++) {
+      const factor = augmented[row][col] / pivot
+      for (let j = col; j <= n; j++) {
+        augmented[row][j] -= factor * augmented[col][j]
+      }
+    }
+  }
+
+  const h = new Array(n).fill(0)
+  for (let i = n - 1; i >= 0; i--) {
+    let sum = augmented[i][n]
+    for (let j = i + 1; j < n; j++) {
+      sum -= augmented[i][j] * h[j]
+    }
+    h[i] = sum / augmented[i][i]
+  }
+
+  return h
+}
+
+/**
+ * Resize a canvas and return a JPEG data URL.
+ */
+export function resizeCanvasToDataUrl(
+  canvas: HTMLCanvasElement,
+  maxWidth: number = 900,
+  maxHeight: number = 1260,
+  quality: number = 0.85
+): string {
+  const scale = Math.min(1, maxWidth / canvas.width, maxHeight / canvas.height)
+  if (scale >= 1) {
+    return canvas.toDataURL('image/jpeg', quality)
+  }
+
+  const outCanvas = document.createElement('canvas')
+  outCanvas.width = Math.round(canvas.width * scale)
+  outCanvas.height = Math.round(canvas.height * scale)
+  const ctx = outCanvas.getContext('2d')!
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(canvas, 0, 0, outCanvas.width, outCanvas.height)
+  return outCanvas.toDataURL('image/jpeg', quality)
+}
