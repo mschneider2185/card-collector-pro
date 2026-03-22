@@ -402,7 +402,8 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
           </h3>
           <button
             onClick={resetAll}
-            className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="mt-4 px-6 py-2 text-sm font-semibold transition-opacity hover:opacity-80"
+            style={{ background: '#C9A84C', color: '#0D0D0D', borderRadius: '4px' }}
           >
             Scan Another Sheet
           </button>
@@ -447,7 +448,8 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
               <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
                 <button
                   onClick={() => setShowCamera(true)}
-                  className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                  className="px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-80"
+                  style={{ background: '#C9A84C', color: '#0D0D0D', borderRadius: '4px' }}
                 >
                   Open Camera
                 </button>
@@ -475,7 +477,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
       {stage === 'processing' && (
         <div className="space-y-4">
           <div className="flex items-center gap-3 text-white/70 text-sm">
-            <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+            <div className="w-4 h-4 border-2 border-t-transparent animate-spin" style={{ borderColor: '#C9A84C', borderTopColor: 'transparent', borderRadius: '2px' }} />
             <span>{processingStep}</span>
           </div>
 
@@ -524,7 +526,8 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
           <div className="flex flex-col sm:flex-row gap-3 pt-2">
             <button
               onClick={saveAll}
-              className="flex-1 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors"
+              className="flex-1 py-3 font-semibold transition-opacity hover:opacity-80"
+              style={{ background: '#C9A84C', color: '#0D0D0D', borderRadius: '4px' }}
             >
               Save {reviewCards.filter(c => c.card_id).length} Card{reviewCards.filter(c => c.card_id).length !== 1 ? 's' : ''}
             </button>
@@ -541,7 +544,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
       {/* ── SAVING ── */}
       {stage === 'saving' && (
         <div className="text-center py-12">
-          <div className="w-10 h-10 border-4 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <div className="w-10 h-10 border-4 border-t-transparent animate-spin mx-auto mb-4" style={{ borderColor: '#C9A84C', borderTopColor: 'transparent', borderRadius: '2px' }} />
           <p className="text-white/70">Saving cards to your collection...</p>
         </div>
       )}
@@ -549,7 +552,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
       {/* ── DISCARD CONFIRM ── */}
       {discardConfirm && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-800 rounded-2xl p-6 max-w-sm w-full text-center space-y-4">
+          <div className="p-6 max-w-sm w-full text-center space-y-4" style={{ background: '#1A1A2E', border: '1px solid #3D3D5C', borderRadius: '4px' }}>
             <h3 className="text-white font-bold text-lg">Discard all 9 cards?</h3>
             <p className="text-white/60 text-sm">Any extracted card data will be lost.</p>
             <div className="flex gap-3">
@@ -591,7 +594,7 @@ function SlotCard({ position, slot }: { position: number; slot: SlotState }) {
       <div className="text-white/40 mb-1">{label}</div>
       {slot.status === 'loading' && (
         <div className="flex items-center justify-center h-10">
-          <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+          <div className="w-4 h-4 border-2 border-t-transparent animate-spin" style={{ borderColor: '#C9A84C', borderTopColor: 'transparent', borderRadius: '2px' }} />
         </div>
       )}
       {slot.status === 'done' && card && (
@@ -761,7 +764,7 @@ function Field({
         type="text"
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="w-full bg-white/10 border border-white/15 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-blue-400"
+        className="w-full bg-white/10 border border-white/15 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-yellow-400"
       />
     </div>
   )

@@ -148,149 +148,132 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-800 p-4 flex items-center justify-center">
-        <div className="text-white text-lg">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
+        <div className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Loading...</div>
       </div>
     )
   }
 
   if (!user || !authUser) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-800 p-4 flex items-center justify-center">
-        <div className="text-white text-lg">Please sign in to access settings</div>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
+        <div className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Please sign in to access settings</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-800">
+    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       {/* Header */}
-      <header className="relative bg-white/10 backdrop-blur-md border-b border-white/20 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <Link href="/" className="flex items-center space-x-2 text-purple-200 hover:text-white transition-colors">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                <span className="font-medium">Back to Home</span>
-              </Link>
-              <h1 className="text-2xl font-bold text-white">
-                Settings
-              </h1>
-            </div>
-            <AuthButton />
-          </div>
-        </div>
+      <header
+        className="sticky top-0 z-30 flex items-center justify-between px-6 h-14"
+        style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}
+      >
+        <h1
+          className="text-base font-semibold"
+          style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text)' }}
+        >
+          Settings
+        </h1>
+        <AuthButton />
       </header>
 
-      <div className="p-4">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Settings</h1>
-            <p className="text-purple-200">Manage your account and profile settings</p>
-          </div>
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+        <div className="grid gap-5 md:grid-cols-2">
+          {/* Profile Section */}
+          <div className="p-6" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
+            <h2 className="text-sm font-semibold mb-5 uppercase tracking-widest" style={{ color: 'var(--color-text-secondary)', letterSpacing: '0.08em' }}>Profile</h2>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* Profile Section */}
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
-              <h2 className="text-xl font-semibold text-white mb-6">Profile</h2>
-              
-              <div className="space-y-6">
-                {/* Avatar Section */}
-                <div>
-                  <label className="block text-sm font-medium text-purple-200 mb-3">
-                    Profile Picture
-                  </label>
-                  <AvatarUploader
-                    userId={authUser.id}
-                    currentAvatarUrl={avatarUrl}
-                    onUploadComplete={handleAvatarUpload}
-                  />
-                </div>
-
-                {/* Username Section */}
-                <div>
-                  <label htmlFor="username" className="block text-sm font-medium text-purple-200 mb-2">
-                    Username
-                  </label>
-                  <input
-                    type="text"
-                    id="username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Enter your username"
-                    className="w-full px-4 py-2 bg-white/20 border border-white/30 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent"
-                  />
-                  <p className="mt-1 text-xs text-purple-300">
-                    3-20 characters, lowercase letters and underscores only
-                  </p>
-                </div>
-
-                {/* Save Button */}
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
-                >
-                  {saving ? 'Saving...' : 'Save Profile'}
-                </button>
+            <div className="space-y-5">
+              {/* Avatar Section */}
+              <div>
+                <label className="block text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+                  Profile picture
+                </label>
+                <AvatarUploader
+                  userId={authUser.id}
+                  currentAvatarUrl={avatarUrl}
+                  onUploadComplete={handleAvatarUpload}
+                />
               </div>
-            </div>
 
-            {/* Account Section */}
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
-              <h2 className="text-xl font-semibold text-white mb-6">Account</h2>
-              
-              <div className="space-y-4">
-                {/* Email Display */}
-                <div>
-                  <label className="block text-sm font-medium text-purple-200 mb-2">
-                    Email
-                  </label>
-                  <div className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white/70">
-                    {authUser?.email || 'No email'}
-                  </div>
-                  <p className="mt-1 text-xs text-purple-300">
-                    Email cannot be changed from this interface
-                  </p>
-                </div>
-
-                {/* Account Created */}
-                <div>
-                  <label className="block text-sm font-medium text-purple-200 mb-2">
-                    Member Since
-                  </label>
-                  <div className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white/70">
-                    {new Date(user.created_at).toLocaleDateString()}
-                  </div>
-                </div>
-
-                {/* User ID (for debugging/support) */}
-                <div>
-                  <label className="block text-sm font-medium text-purple-200 mb-2">
-                    User ID
-                  </label>
-                  <div className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white/70 font-mono text-xs break-all">
-                    {user.id}
-                  </div>
-                  <p className="mt-1 text-xs text-purple-300">
-                    For support purposes only
-                  </p>
-                </div>
+              {/* Username Section */}
+              <div>
+                <label htmlFor="username" className="block text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+                  Username
+                </label>
+                <input
+                  type="text"
+                  id="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="your_username"
+                  className="w-full px-3 py-2 text-sm focus:outline-none"
+                  style={{
+                    background: 'var(--color-bg)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: '2px',
+                    color: 'var(--color-text)',
+                  }}
+                />
+                <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                  3-20 characters, lowercase letters and underscores only
+                </p>
               </div>
+
+              {/* Save Button */}
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="w-full px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ background: 'var(--color-accent)', color: '#0D0D0D', borderRadius: '4px' }}
+              >
+                {saving ? 'Saving...' : 'Save profile'}
+              </button>
             </div>
           </div>
 
-          {/* Back to Home */}
-          <div className="mt-8 text-center">
-            <Link
-              href="/"
-              className="inline-flex items-center text-purple-200 hover:text-white transition-colors"
-            >
-              ← Back to Home
-            </Link>
+          {/* Account Section */}
+          <div className="p-6" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
+            <h2 className="text-sm font-semibold mb-5 uppercase tracking-widest" style={{ color: 'var(--color-text-secondary)', letterSpacing: '0.08em' }}>Account</h2>
+
+            <div className="space-y-4">
+              {/* Email Display */}
+              <div>
+                <label className="block text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+                  Email
+                </label>
+                <div className="px-3 py-2 text-sm" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '2px', color: 'var(--color-text-muted)' }}>
+                  {authUser?.email || 'No email'}
+                </div>
+                <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                  Email cannot be changed here
+                </p>
+              </div>
+
+              {/* Account Created */}
+              <div>
+                <label className="block text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+                  Member since
+                </label>
+                <div className="px-3 py-2 text-sm" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '2px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  {new Date(user.created_at).toLocaleDateString()}
+                </div>
+              </div>
+
+              {/* User ID */}
+              <div>
+                <label className="block text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+                  User ID
+                </label>
+                <div className="px-3 py-2 text-xs break-all" style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '2px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  {user.id}
+                </div>
+                <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                  For support purposes only
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>

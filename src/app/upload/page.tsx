@@ -457,19 +457,16 @@ export default function UploadPage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center bg-white/80 backdrop-blur-sm p-8 rounded-2xl shadow-xl border border-white/20">
-          <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
+        <div className="text-center p-8" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
+          <div className="w-12 h-12 flex items-center justify-center mx-auto mb-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
+            <svg className="w-6 h-6" style={{ color: 'var(--color-accent)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Please sign in to upload cards</h2>
-          <Link href="/" className="inline-flex items-center text-blue-600 hover:text-blue-800 font-medium transition-colors">
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Go back to home
+          <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--color-text)' }}>Sign in to upload cards</h2>
+          <Link href="/" className="text-sm font-medium transition-colors" style={{ color: 'var(--color-accent)' }}>
+            Back to home
           </Link>
         </div>
       </div>
@@ -477,46 +474,44 @@ export default function UploadPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       {/* Header */}
-      <header className="relative bg-white/80 backdrop-blur-md border-b border-white/20 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <Link href="/" className="flex items-center space-x-2 text-blue-600 hover:text-blue-800 transition-colors">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                <span className="font-medium">Back to Home</span>
-              </Link>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                Upload Cards
-              </h1>
-            </div>
-          </div>
-        </div>
+      <header
+        className="sticky top-0 z-30 flex items-center justify-between px-6 h-14"
+        style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}
+      >
+        <h1
+          className="text-base font-semibold"
+          style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text)' }}
+        >
+          Add Card
+        </h1>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
         {/* Mode Selector */}
-        <div className="flex rounded-xl overflow-hidden border border-white/30 shadow mb-6 bg-white/60 backdrop-blur-sm w-fit mx-auto">
+        <div
+          className="flex overflow-hidden mb-6 w-fit"
+          style={{ border: '1px solid var(--color-border)', borderRadius: '4px' }}
+        >
           <button
             onClick={() => setUploadMode('single')}
-            className={`px-6 py-2.5 text-sm font-semibold transition-colors ${
-              uploadMode === 'single'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-600 hover:bg-white/60'
-            }`}
+            className="px-5 py-2 text-sm font-semibold transition-colors"
+            style={{
+              background: uploadMode === 'single' ? 'var(--color-accent)' : 'transparent',
+              color: uploadMode === 'single' ? '#0D0D0D' : 'var(--color-text-secondary)',
+            }}
           >
             Single Card
           </button>
           <button
             onClick={() => setUploadMode('sheet')}
-            className={`px-6 py-2.5 text-sm font-semibold transition-colors ${
-              uploadMode === 'sheet'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-600 hover:bg-white/60'
-            }`}
+            className="px-5 py-2 text-sm font-semibold transition-colors"
+            style={{
+              background: uploadMode === 'sheet' ? 'var(--color-accent)' : 'transparent',
+              color: uploadMode === 'sheet' ? '#0D0D0D' : 'var(--color-text-secondary)',
+              borderLeft: '1px solid var(--color-border)',
+            }}
           >
             Sheet (3×3)
           </button>
@@ -524,47 +519,48 @@ export default function UploadPage() {
 
         {/* Sheet Upload Mode */}
         {uploadMode === 'sheet' && (
-          <div className="bg-gray-900 rounded-2xl shadow-xl border border-white/10 p-6 mb-8">
+          <div className="p-6 mb-8" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
             <div className="text-center mb-6">
               <h2 className="text-2xl font-bold text-white mb-2">Scan a 3×3 Binder Sheet</h2>
-              <p className="text-gray-400 text-sm max-w-md mx-auto">
+              <p className="text-sm max-w-md mx-auto" style={{ color: 'var(--color-text-muted)' }}>
                 Photograph a 9-pocket binder page. One AI call extracts all 9 cards at once.
               </p>
             </div>
             {user ? (
               <SheetUploadMode user={user} />
             ) : (
-              <p className="text-center text-gray-400 py-8">Please sign in to scan sheets.</p>
+              <p className="text-center py-8 text-sm" style={{ color: 'var(--color-text-muted)' }}>Please sign in to scan sheets.</p>
             )}
           </div>
         )}
 
         {/* Upload Section (single-card mode) */}
         {uploadMode === 'single' && (
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8 mb-8">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Upload Card Images</h2>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Upload photos of your trading cards. Our advanced AI will analyze them and help you add them to your collection.
+        <div className="p-6 mb-8" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold mb-1" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text)' }}>Upload card images</h2>
+            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+              AI reads player, set, year, brand, attributes, and card number automatically.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid md:grid-cols-2 gap-6">
             {/* Front Image Upload */}
-            <div className="space-y-4">
-              <h3 className="text-xl font-semibold text-gray-900 text-center">Front of Card</h3>
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Front of card</h3>
               <div
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
-                className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 ${
-                  uploading || processing
-                    ? 'border-blue-400 bg-blue-50/50' 
-                    : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50/30'
-                }`}
+                className="relative p-6 text-center transition-all duration-150"
+                style={{
+                  border: `1px dashed ${uploading || processing ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                  borderRadius: '4px',
+                  background: uploading || processing ? 'rgba(201,168,76,0.04)' : 'transparent',
+                }}
               >
                 {uploadedImage ? (
-                  <div className="space-y-4">
-                    <div className="relative w-full aspect-[2.5/3.5] bg-gray-100 rounded-lg overflow-hidden">
+                  <div className="space-y-3">
+                    <div className="relative w-full aspect-[2.5/3.5] overflow-hidden card-image-wrapper" style={{ background: 'var(--color-bg)' }}>
                       {frontPreviewUrl && <Image
                         src={frontPreviewUrl}
                         alt="Front of card"
@@ -572,10 +568,10 @@ export default function UploadPage() {
                         className="object-contain"
                       />}
                     </div>
-                    <p className="text-sm text-green-600 font-medium">✓ Front image uploaded</p>
+                    <p className="text-xs font-medium" style={{ color: 'var(--color-success)' }}>Front image uploaded</p>
                     <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                      <label className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg cursor-pointer transition-colors">
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <label className="inline-flex items-center px-3 py-1.5 text-xs font-medium cursor-pointer transition-colors" style={{ background: 'var(--color-accent)', color: '#0D0D0D', borderRadius: '2px' }}>
+                        <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                         </svg>
                         <input
@@ -588,7 +584,8 @@ export default function UploadPage() {
                       </label>
                       <button
                         onClick={() => openCamera('front')}
-                        className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
+                        className="inline-flex items-center px-3 py-1.5 text-xs font-medium transition-colors"
+                        style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: '2px' }}
                       >
                         <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -600,16 +597,16 @@ export default function UploadPage() {
                   </div>
                 ) : (
                   <div>
-                    <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-                      <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    <div className="w-10 h-10 flex items-center justify-center mx-auto mb-3" style={{ border: '1px solid var(--color-border)', borderRadius: '2px', color: 'var(--color-accent)' }}>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                       </svg>
                     </div>
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">Upload Front</h4>
-                    <p className="text-gray-600 mb-4 text-sm">Required</p>
-                    <div className="flex flex-col gap-3">
-                      <label className="inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer">
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--color-text)' }}>Upload front</h4>
+                    <p className="text-xs mb-4" style={{ color: 'var(--color-text-muted)' }}>Required</p>
+                    <div className="flex flex-col gap-2">
+                      <label className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold cursor-pointer transition-colors" style={{ background: 'var(--color-accent)', color: '#0D0D0D', borderRadius: '2px' }}>
+                        <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                         </svg>
                         <input
@@ -618,17 +615,18 @@ export default function UploadPage() {
                           onChange={handleFrontFileSelect}
                           className="sr-only"
                         />
-                        Choose from Gallery
+                        Choose from gallery
                       </label>
                       <button
                         onClick={() => openCamera('front')}
-                        className="inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+                        className="inline-flex items-center justify-center px-4 py-2 text-xs font-medium transition-colors"
+                        style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: '2px' }}
                       >
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
                         </svg>
-                        Take Photo
+                        Take photo
                       </button>
                     </div>
                   </div>
@@ -637,16 +635,19 @@ export default function UploadPage() {
             </div>
 
             {/* Back Image Upload */}
-            <div className="space-y-4">
-              <h3 className="text-xl font-semibold text-gray-900 text-center">Back of Card</h3>
-              <div className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 ${
-                uploading || processing
-                  ? 'border-purple-400 bg-purple-50/50' 
-                  : 'border-gray-300 hover:border-purple-400 hover:bg-purple-50/30'
-              }`}>
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Back of card</h3>
+              <div
+                className="relative p-6 text-center transition-all duration-150"
+                style={{
+                  border: `1px dashed ${uploading || processing ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                  borderRadius: '4px',
+                  background: uploading || processing ? 'rgba(201,168,76,0.04)' : 'transparent',
+                }}
+              >
                 {uploadedBackImage ? (
-                  <div className="space-y-4">
-                    <div className="relative w-full aspect-[2.5/3.5] bg-gray-100 rounded-lg overflow-hidden">
+                  <div className="space-y-3">
+                    <div className="relative w-full aspect-[2.5/3.5] overflow-hidden card-image-wrapper" style={{ background: 'var(--color-bg)' }}>
                       {backPreviewUrl && <Image
                         src={backPreviewUrl}
                         alt="Back of card"
@@ -654,10 +655,10 @@ export default function UploadPage() {
                         className="object-contain"
                       />}
                     </div>
-                    <p className="text-sm text-green-600 font-medium">✓ Back image uploaded</p>
+                    <p className="text-xs font-medium" style={{ color: 'var(--color-success)' }}>Back image uploaded</p>
                     <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                      <label className="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg cursor-pointer transition-colors">
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <label className="inline-flex items-center px-3 py-1.5 text-xs font-medium cursor-pointer transition-colors" style={{ background: 'var(--color-accent)', color: '#0D0D0D', borderRadius: '2px' }}>
+                        <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                         </svg>
                         <input
@@ -670,28 +671,29 @@ export default function UploadPage() {
                       </label>
                       <button
                         onClick={() => openCamera('back')}
-                        className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
+                        className="inline-flex items-center px-3 py-1.5 text-xs font-medium transition-colors"
+                        style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: '2px' }}
                       >
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
-                        Retake Photo
+                        Retake
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div>
-                    <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-                      <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    <div className="w-10 h-10 flex items-center justify-center mx-auto mb-3" style={{ border: '1px solid var(--color-border)', borderRadius: '2px', color: 'var(--color-text-muted)' }}>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                       </svg>
                     </div>
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">Upload Back</h4>
-                    <p className="text-gray-600 mb-4 text-sm">Optional (improves accuracy)</p>
-                    <div className="flex flex-col gap-3">
-                      <label className="inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer">
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <h4 className="text-sm font-semibold mb-1" style={{ color: 'var(--color-text)' }}>Upload back</h4>
+                    <p className="text-xs mb-4" style={{ color: 'var(--color-text-muted)' }}>Optional — improves accuracy</p>
+                    <div className="flex flex-col gap-2">
+                      <label className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold cursor-pointer transition-colors" style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: '2px' }}>
+                        <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                         </svg>
                         <input
@@ -700,17 +702,18 @@ export default function UploadPage() {
                           onChange={handleBackFileSelect}
                           className="sr-only"
                         />
-                        Choose from Gallery
+                        Choose from gallery
                       </label>
                       <button
                         onClick={() => openCamera('back')}
-                        className="inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+                        className="inline-flex items-center justify-center px-4 py-2 text-xs font-medium transition-colors"
+                        style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: '2px' }}
                       >
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
                         </svg>
-                        Take Photo
+                        Take photo
                       </button>
                     </div>
                   </div>
@@ -724,15 +727,16 @@ export default function UploadPage() {
             <div className="mt-8 text-center">
               {processing ? (
                 <div className="flex flex-col items-center">
-                  <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-500 mb-6"></div>
-                  <p className="text-lg text-gray-600 mb-2">{processingStep || 'Analyzing your card...'}</p>
-                  <p className="text-sm text-gray-500">Our AI is identifying card details from {uploadedBackImage ? 'both sides' : 'the front'}</p>
+                  <div className="animate-spin h-8 w-8 border-2 mb-4" style={{ borderColor: 'var(--color-border)', borderTopColor: 'var(--color-accent)', borderRadius: '50%' }}></div>
+                  <p className="text-sm mb-1" style={{ color: 'var(--color-text)' }}>{processingStep || 'Analyzing card...'}</p>
+                  <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Identifying details from {uploadedBackImage ? 'both sides' : 'the front'}</p>
                 </div>
               ) : (
                 <button
                   onClick={processCard}
                   disabled={!uploadedImage}
-                  className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 disabled:cursor-not-allowed disabled:transform-none"
+                  className="inline-flex items-center px-6 py-2.5 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ background: 'var(--color-accent)', color: '#0D0D0D', borderRadius: '4px' }}
                 >
                   <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -747,7 +751,7 @@ export default function UploadPage() {
 
           {/* AI Analysis Results */}
           {processingResult && (
-            <div className="mt-8 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-2xl p-6">
+            <div className="mt-6 p-5" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
               <div className="flex items-start mb-4">
                 <div className="flex-shrink-0">
                   <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -772,17 +776,17 @@ export default function UploadPage() {
                       {Math.round(processingResult.confidence * 100)}% confidence
                     </span>
                     {processingResult.extractedData.attributes?.rookie && (
-                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded-full">
+                      <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold" style={{ border: '1px solid var(--color-accent)', color: 'var(--color-accent)', borderRadius: '2px', fontFamily: 'var(--font-mono)' }}>
                         RC
                       </span>
                     )}
                     {processingResult.extractedData.attributes?.autographed && (
-                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                      <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold" style={{ border: '1px solid var(--color-accent)', color: 'var(--color-accent)', borderRadius: '2px', fontFamily: 'var(--font-mono)' }}>
                         AUTO
                       </span>
                     )}
                     {processingResult.extractedData.attributes?.patch && (
-                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-orange-100 text-orange-800 rounded-full">
+                      <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold" style={{ border: '1px solid var(--color-accent)', color: 'var(--color-accent)', borderRadius: '2px', fontFamily: 'var(--font-mono)' }}>
                         PATCH
                       </span>
                     )}
@@ -794,12 +798,12 @@ export default function UploadPage() {
 
           {/* Card Entry Form */}
           {showCardForm && (
-            <div className="mt-8 bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8">
-              <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center">Review & Edit Card Details</h3>
+            <div className="mt-6 p-6" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
+              <h3 className="text-base font-semibold mb-5" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text)' }}>Review card details</h3>
               <form onSubmit={handleCardSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Sport</label>
+                    <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Sport</label>
                     <input
                       type="text"
                       value={cardData.sport}
@@ -810,7 +814,7 @@ export default function UploadPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
+                    <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Year</label>
                     <input
                       type="number"
                       value={cardData.year}
@@ -822,7 +826,7 @@ export default function UploadPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Brand</label>
+                    <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Brand</label>
                     <input
                       type="text"
                       value={cardData.brand}
@@ -833,7 +837,7 @@ export default function UploadPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Series</label>
+                    <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Series</label>
                     <input
                       type="text"
                       value={cardData.series}
@@ -843,7 +847,7 @@ export default function UploadPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Set Number</label>
+                    <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Set Number</label>
                     <input
                       type="text"
                       value={cardData.set_number}
@@ -853,7 +857,7 @@ export default function UploadPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Card Number</label>
+                    <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Card Number</label>
                     <input
                       type="text"
                       value={cardData.card_number}
@@ -863,7 +867,7 @@ export default function UploadPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Player Name</label>
+                    <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Player Name</label>
                     <input
                       type="text"
                       value={cardData.player_name}
@@ -874,7 +878,7 @@ export default function UploadPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Team</label>
+                    <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Team</label>
                     <input
                       type="text"
                       value={cardData.team}
@@ -884,7 +888,7 @@ export default function UploadPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Position</label>
+                    <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Position</label>
                     <input
                       type="text"
                       value={cardData.position}
@@ -894,7 +898,7 @@ export default function UploadPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Variation</label>
+                    <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Variation</label>
                     <input
                       type="text"
                       value={cardData.variation}
@@ -904,7 +908,7 @@ export default function UploadPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Condition</label>
+                    <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Condition</label>
                     <select
                       value={cardData.condition}
                       onChange={(e) => setCardData({...cardData, condition: e.target.value})}
@@ -921,7 +925,7 @@ export default function UploadPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
+                    <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Quantity</label>
                     <input
                       type="number"
                       value={cardData.quantity}
@@ -933,40 +937,40 @@ export default function UploadPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Card Attributes</label>
+                    <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Card Attributes</label>
                     <div className="space-y-2">
                       <label className="flex items-center">
                         <input
                           type="checkbox"
                           checked={cardData.rookie}
                           onChange={(e) => setCardData({...cardData, rookie: e.target.checked})}
-                          className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          className="mr-2 focus:ring-0 focus:outline-none"
                         />
-                        <span className="text-sm text-gray-700">Rookie Card</span>
+                        <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Rookie Card</span>
                       </label>
                       <label className="flex items-center">
                         <input
                           type="checkbox"
                           checked={cardData.autographed}
                           onChange={(e) => setCardData({...cardData, autographed: e.target.checked})}
-                          className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          className="mr-2 focus:ring-0 focus:outline-none"
                         />
-                        <span className="text-sm text-gray-700">Autographed</span>
+                        <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Autographed</span>
                       </label>
                       <label className="flex items-center">
                         <input
                           type="checkbox"
                           checked={cardData.patch}
                           onChange={(e) => setCardData({...cardData, patch: e.target.checked})}
-                          className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          className="mr-2 focus:ring-0 focus:outline-none"
                         />
-                        <span className="text-sm text-gray-700">Patch/Jersey</span>
+                        <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Patch/Jersey</span>
                       </label>
                     </div>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Notes</label>
                   <textarea
                     value={cardData.notes}
                     onChange={(e) => setCardData({...cardData, notes: e.target.value})}
@@ -978,9 +982,10 @@ export default function UploadPage() {
                 <div className="flex justify-center space-x-4">
                   <button
                     type="submit"
-                    className="px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+                    className="px-6 py-2.5 text-sm font-semibold transition-colors"
+                    style={{ background: 'var(--color-accent)', color: '#0D0D0D', borderRadius: '4px' }}
                   >
-                    Add to Collection
+                    Add to collection
                   </button>
                   <button
                     type="button"
@@ -989,7 +994,8 @@ export default function UploadPage() {
                       setUploadedImage(null)
                       setProcessingResult(null)
                     }}
-                    className="px-8 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
+                    className="px-6 py-2.5 text-sm font-medium transition-colors"
+                    style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: '4px' }}
                   >
                     Cancel
                   </button>
@@ -998,24 +1004,25 @@ export default function UploadPage() {
             </div>
           )}
 
-          <div className="mt-6 p-6 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-2xl">
+          <div className="mt-6 p-5" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
             <div className="flex items-start">
               <div className="flex-shrink-0">
-                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6" style={{ color: 'var(--color-accent)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
               </div>
               <div className="ml-3">
-                <h4 className="text-lg font-medium text-blue-800 mb-2">
-                  🤖 AI Card Recognition Active!
+                <h4 className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
+                  AI Card Recognition Active
                 </h4>
-                <p className="text-blue-700 mb-4">
+                <p className="text-sm mb-4" style={{ color: 'var(--color-text-muted)' }}>
                   Our AI will automatically analyze your uploaded cards to identify player names, teams, years, and special attributes. Review and edit the extracted data before adding to your collection.
                 </p>
                 <div className="flex space-x-4">
-                  <a 
-                    href="/cards" 
-                    className="inline-flex items-center text-purple-600 hover:text-purple-800 font-medium transition-colors"
+                  <a
+                    href="/cards"
+                    className="inline-flex items-center text-sm font-medium transition-colors"
+                    style={{ color: 'var(--color-accent)' }}
                   >
                     Browse Card Database
                     <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1030,71 +1037,71 @@ export default function UploadPage() {
         )} {/* end uploadMode === 'single' */}
 
         {/* Tips Section */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8">
-          <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center">Tips for Better Card Recognition</h3>
+        <div className="p-6" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
+          <h3 className="text-sm font-semibold mb-5" style={{ color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Tips for better recognition</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
               <div className="flex items-start space-x-3">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                  <span className="text-blue-600 font-bold text-sm">1</span>
+                <div className="w-7 h-7 flex items-center justify-center flex-shrink-0 mt-0.5" style={{ border: '1px solid var(--color-accent)', borderRadius: '2px' }}>
+                  <span className="font-bold text-xs" style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-mono)' }}>1</span>
                 </div>
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Good Lighting</h4>
-                  <p className="text-gray-600 text-sm">Ensure bright, even lighting when taking photos</p>
+                  <h4 className="text-sm font-semibold mb-0.5" style={{ color: 'var(--color-text)' }}>Good Lighting</h4>
+                  <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Ensure bright, even lighting when taking photos</p>
                 </div>
               </div>
               <div className="flex items-start space-x-3">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                  <span className="text-blue-600 font-bold text-sm">2</span>
+                <div className="w-7 h-7 flex items-center justify-center flex-shrink-0 mt-0.5" style={{ border: '1px solid var(--color-accent)', borderRadius: '2px' }}>
+                  <span className="font-bold text-xs" style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-mono)' }}>2</span>
                 </div>
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Flat Surface</h4>
-                  <p className="text-gray-600 text-sm">Keep the card flat and centered in the frame</p>
+                  <h4 className="text-sm font-semibold mb-0.5" style={{ color: 'var(--color-text)' }}>Flat Surface</h4>
+                  <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Keep the card flat and centered in the frame</p>
                 </div>
               </div>
               <div className="flex items-start space-x-3">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                  <span className="text-blue-600 font-bold text-sm">3</span>
+                <div className="w-7 h-7 flex items-center justify-center flex-shrink-0 mt-0.5" style={{ border: '1px solid var(--color-accent)', borderRadius: '2px' }}>
+                  <span className="font-bold text-xs" style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-mono)' }}>3</span>
                 </div>
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Avoid Glare</h4>
-                  <p className="text-gray-600 text-sm">Avoid shadows or glare on the card surface</p>
+                  <h4 className="text-sm font-semibold mb-0.5" style={{ color: 'var(--color-text)' }}>Avoid Glare</h4>
+                  <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Avoid shadows or glare on the card surface</p>
                 </div>
               </div>
             </div>
             <div className="space-y-4">
               <div className="flex items-start space-x-3">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                  <span className="text-blue-600 font-bold text-sm">4</span>
+                <div className="w-7 h-7 flex items-center justify-center flex-shrink-0 mt-0.5" style={{ border: '1px solid var(--color-accent)', borderRadius: '2px' }}>
+                  <span className="font-bold text-xs" style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-mono)' }}>4</span>
                 </div>
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Full Card</h4>
-                  <p className="text-gray-600 text-sm">Include the entire card in the image</p>
+                  <h4 className="text-sm font-semibold mb-0.5" style={{ color: 'var(--color-text)' }}>Full Card</h4>
+                  <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Include the entire card in the image</p>
                 </div>
               </div>
               <div className="flex items-start space-x-3">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                  <span className="text-blue-600 font-bold text-sm">5</span>
+                <div className="w-7 h-7 flex items-center justify-center flex-shrink-0 mt-0.5" style={{ border: '1px solid var(--color-accent)', borderRadius: '2px' }}>
+                  <span className="font-bold text-xs" style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-mono)' }}>5</span>
                 </div>
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Plain Background</h4>
-                  <p className="text-gray-600 text-sm">Use a plain, contrasting background</p>
+                  <h4 className="text-sm font-semibold mb-0.5" style={{ color: 'var(--color-text)' }}>Plain Background</h4>
+                  <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Use a plain, contrasting background</p>
                 </div>
               </div>
               <div className="flex items-start space-x-3">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                  <span className="text-blue-600 font-bold text-sm">6</span>
+                <div className="w-7 h-7 flex items-center justify-center flex-shrink-0 mt-0.5" style={{ border: '1px solid var(--color-accent)', borderRadius: '2px' }}>
+                  <span className="font-bold text-xs" style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-mono)' }}>6</span>
                 </div>
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Camera Tips</h4>
-                  <p className="text-gray-600 text-sm">Hold steady, use the card frame guide, and ensure good focus</p>
+                  <h4 className="text-sm font-semibold mb-0.5" style={{ color: 'var(--color-text)' }}>Camera Tips</h4>
+                  <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Hold steady, use the card frame guide, and ensure good focus</p>
                 </div>
               </div>
             </div>
           </div>
           
           {/* Mobile Camera Tips */}
-          <div className="mt-8 p-6 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-xl">
+          <div className="mt-5 p-4" style={{ border: '1px solid var(--color-border)', borderRadius: '4px' }}>
             <div className="flex items-start">
               <div className="flex-shrink-0">
                 <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1147,7 +1154,8 @@ export default function UploadPage() {
       <div className="fixed bottom-6 right-6 z-40 md:hidden">
         <button
           onClick={() => openCamera('front')}
-          className="flex items-center justify-center w-14 h-14 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-110"
+          className="flex items-center justify-center w-12 h-12 transition-colors"
+          style={{ background: 'var(--color-accent)', color: '#0D0D0D', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.25)' }}
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
