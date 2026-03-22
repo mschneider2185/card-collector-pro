@@ -122,28 +122,55 @@ export function useBatchScan(userId: string) {
 
       // 4. Scale quad coordinates from detection resolution back to full-res,
       //    then validate and warp against the full-res canvas.
-      const scaleX = fullResCanvas.width / detectW
-      const scaleY = fullResCanvas.height / detectH
+      //    GPT-4o sometimes returns normalized (0-1), percentage (0-100),
+      //    or pixel coords relative to the detection image. We auto-detect.
       const imgW = fullResCanvas.width
       const imgH = fullResCanvas.height
 
       const croppedImages: (string | null)[] = new Array(9).fill(null)
       const flaggedPositions: number[] = []
 
+      // Determine coordinate system: check if ALL coords are < 1.1 (normalized)
+      // or < 110 (percentage) vs actual pixel values
+      const allCoords = detection.positions
+        .filter(p => !p.empty)
+        .flatMap(p => p.quad.flat())
+      const maxCoord = allCoords.length > 0 ? Math.max(...allCoords) : 0
+
+      let coordScaleX: number
+      let coordScaleY: number
+      if (maxCoord <= 1.1) {
+        // Normalized 0–1 range → scale to full-res
+        coordScaleX = imgW
+        coordScaleY = imgH
+        console.log('[batchScan] Detected NORMALIZED coordinates (0-1), scaling to full-res')
+      } else if (maxCoord <= 110) {
+        // Percentage 0–100 range → scale to full-res
+        coordScaleX = imgW / 100
+        coordScaleY = imgH / 100
+        console.log('[batchScan] Detected PERCENTAGE coordinates (0-100), scaling to full-res')
+      } else {
+        // Pixel coordinates relative to the detect image → scale to full-res
+        coordScaleX = imgW / detectW
+        coordScaleY = imgH / detectH
+        console.log(`[batchScan] Detected PIXEL coordinates, scaling ${detectW}→${imgW}`)
+      }
+
+      let quadSuccessCount = 0
       for (const pos of detection.positions) {
         if (pos.empty) {
           flaggedPositions.push(pos.index)
           continue
         }
 
-        // Scale quad corners to full-res pixel space
         const scaledQuad = pos.quad.map(([x, y]) => [
-          Math.round(x * scaleX),
-          Math.round(y * scaleY)
+          Math.round(x * coordScaleX),
+          Math.round(y * coordScaleY)
         ]) as [[number,number],[number,number],[number,number],[number,number]]
 
         const isValid = validateQuad(scaledQuad, imgW, imgH)
         if (!isValid) {
+          console.warn(`[batchScan] Quad ${pos.index} failed validation:`, scaledQuad)
           flaggedPositions.push(pos.index)
           continue
         }
@@ -151,9 +178,46 @@ export function useBatchScan(userId: string) {
         try {
           const warped = warpCardToRect(fullResCanvas, scaledQuad, 300, 420)
           croppedImages[pos.index] = resizeCanvasToDataUrl(warped, 900, 1260, 0.85)
+          quadSuccessCount++
         } catch (warpErr) {
           console.error(`Warp failed for position ${pos.index}:`, warpErr)
           flaggedPositions.push(pos.index)
+        }
+      }
+
+      // ── FALLBACK: if fewer than 5 quads validated, use known binder page
+      //    geometry (POCKET_GRID) to crop instead — reliable for standard pages
+      if (quadSuccessCount < 5) {
+        console.warn(`[batchScan] Only ${quadSuccessCount}/9 quads valid — falling back to POCKET_GRID`)
+        const POCKET_GRID = {
+          cols: [
+            { start: 0.035, end: 0.315 },
+            { start: 0.350, end: 0.650 },
+            { start: 0.685, end: 0.965 },
+          ],
+          rows: [
+            { start: 0.025, end: 0.315 },
+            { start: 0.345, end: 0.655 },
+            { start: 0.685, end: 0.975 },
+          ],
+        }
+
+        flaggedPositions.length = 0
+        for (let row = 0; row < 3; row++) {
+          for (let col = 0; col < 3; col++) {
+            const idx = row * 3 + col
+            const srcX = Math.round(imgW * POCKET_GRID.cols[col].start)
+            const srcY = Math.round(imgH * POCKET_GRID.rows[row].start)
+            const srcW = Math.round(imgW * (POCKET_GRID.cols[col].end - POCKET_GRID.cols[col].start))
+            const srcH = Math.round(imgH * (POCKET_GRID.rows[row].end - POCKET_GRID.rows[row].start))
+            const cropCanvas = document.createElement('canvas')
+            const outScale = Math.min(1, 900 / srcW)
+            cropCanvas.width = Math.round(srcW * outScale)
+            cropCanvas.height = Math.round(srcH * outScale)
+            const ctx = cropCanvas.getContext('2d')!
+            ctx.drawImage(fullResCanvas, srcX, srcY, srcW, srcH, 0, 0, cropCanvas.width, cropCanvas.height)
+            croppedImages[idx] = cropCanvas.toDataURL('image/jpeg', 0.85)
+          }
         }
       }
 
