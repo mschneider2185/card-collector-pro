@@ -295,4 +295,233 @@ Use the NEXUS Handoff Template format from `strategy/coordination/handoff-templa
 
 ---
 
+## 12. Authenticated Homepage — The Sports Hub Experience
+
+> **The homepage is the product's heartbeat.** After authentication, the user should feel like they've landed inside a living, breathing sports command center built specifically around them — not a generic feed, not a card spreadsheet.
+
+The inspiration is The Athletic meets Bleacher Report meets a personal card portfolio. Every element on the page is filtered through the user's preferences. Nothing generic, nothing irrelevant.
+
+---
+
+### 12.1 — Onboarding Preference System (Gate to Personalization)
+
+Before a new user ever sees the homepage, a lightweight onboarding flow captures the preferences that power everything:
+
+**Step 1 — Pick your sports** (multi-select: NHL, NBA, NFL, MLB, MLS, etc.)
+**Step 2 — Pick your teams** (filtered to selected sports)
+**Step 3 — Pick favorite players** (optional, searchable, filtered to selected teams)
+**Step 4 — Collection prompt** ("Add your first card" or "Skip for now")
+
+These preferences are stored in a `user_preferences` table and immediately drive:
+- Which scores appear in the live score scroller
+- Which news stories populate the feed
+- Which Kalshi markets surface in the markets scroller
+- Which card alerts get triggered (Phase 4 Live Sports Integration)
+
+Users can update preferences at any time from their profile settings. Additionally, as they favorite players and teams from within the app (news cards, score cards, player pages), those signals feed back into their preference profile automatically.
+
+**Design principle**: Never show a user a score, story, or market that has nothing to do with their sports. The competitor failure mode (Bleacher Report's most-complained-about issue) is showing irrelevant scores. We solve this at onboarding, not after the fact.
+
+---
+
+### 12.2 — Homepage Layout
+
+The homepage has two distinct layouts depending on screen size, but the same content hierarchy on both.
+
+#### Mobile Layout (primary surface)
+
+```
+┌─────────────────────────────────────┐
+│  [Sticky: Sport/Team tab switcher]  │  ← One-tap switch between followed sports/teams
+├─────────────────────────────────────┤
+│  [Live Scores Strip]                │  ← Horizontal scroller, YOUR sports only
+├─────────────────────────────────────┤
+│  [Kalshi Markets Strip]             │  ← Horizontal scroller, algorithmically relevant
+├─────────────────────────────────────┤
+│                                     │
+│  [Main Content Feed]                │  ← Alternating news cards + video cards
+│  - News story card                  │
+│  - Video card (YouTube embed)       │
+│  - News story card                  │
+│  - Card Collection pulse widget     │  ← Your cards, surfaced when relevant
+│  - News story card                  │
+│  ...                                │
+│                                     │
+├─────────────────────────────────────┤
+│  Feed | Scores | Cards | Search | ⚙ │  ← Bottom nav
+└─────────────────────────────────────┘
+```
+
+**Key mobile decisions:**
+- The scores and Kalshi scrollers are intentionally separate strips (not tabbed) because they serve different cognitive modes — scores are passive awareness, markets are active interest
+- Video cards link to YouTube (no licensing required, no self-hosting)
+- The collection pulse widget is not a fixed position — it surfaces contextually within the feed when there's something relevant to show (e.g., after a game result that affects a card the user owns)
+
+#### Desktop Layout (3-column)
+
+```
+┌──────────────┬───────────────────────┬──────────────┐
+│              │  [Score + Kalshi bar] │              │
+│  LEFT RAIL   │  [Hero video/story]   │  RIGHT RAIL  │
+│              │                       │              │
+│  News Feed   │  Featured story card  │  Live Scores │
+│  (your       │                       │              │
+│  teams/      │  Card Collection      │  Kalshi      │
+│  sports)     │  Pulse Widget         │  Markets     │
+│              │                       │  Feed        │
+│  Story cards │  More news/video      │              │
+│  continue    │  cards                │  Standings   │
+│  scrolling   │                       │              │
+└──────────────┴───────────────────────┴──────────────┘
+```
+
+**Key desktop decisions:**
+- Left rail = news (text-first, how users scan left-to-right)
+- Center = video hero + featured content + collection widget (the unique value of the platform)
+- Right rail = scores + Kalshi + standings (data at a glance)
+- This mirrors how ESPN's 3-column layout works but with the collection widget as the center differentiator
+
+---
+
+### 12.3 — Live Scores Scroller
+
+- Pulls from SportsRadar (already in the tech stack plan)
+- Filtered strictly to sports and teams from `user_preferences`
+- Shows: team abbreviations, score, game status (Live / Final / Upcoming + tip-off time)
+- Clicking a score card expands to full game detail or links to game page
+- On mobile: horizontal scroll strip pinned below the tab switcher
+- On desktop: right rail section, auto-refreshing
+
+---
+
+### 12.4 — Kalshi Markets Feed (Read-Only Integration)
+
+Kalshi is a regulated prediction market platform. The integration is intentionally read-only — no account linking, no financial data handled by this platform.
+
+**How it works:**
+- Pull public Kalshi market data via their API
+- Filter and rank markets algorithmically based on `user_preferences` (sport, team, player matches)
+- Surface the most relevant markets as scrollable cards
+- Clicking a market card opens Kalshi's site/app directly in a new tab where users can trade on their own account
+
+**Market selection algorithm (v1 — simple):**
+1. Exact team match (e.g., "Will the Wild make the playoffs?") → highest priority
+2. Sport match (e.g., "Will the NHL season be extended?") → medium priority
+3. Broad sports/trending markets → fill remaining slots
+
+**Card format:**
+```
+┌──────────────────────────────────┐
+│ 🏒 Will the Wild win tonight?    │
+│ YES 67¢  |  NO 33¢              │
+│ 1,240 contracts traded           │
+│                [Trade on Kalshi →]│
+└──────────────────────────────────┘
+```
+
+**What we explicitly do not do:**
+- No account linking
+- No financial transaction handling
+- No display of user's Kalshi positions
+- No "buy/sell" functionality within the platform
+
+This keeps the integration clean, legally simple, and fast to build while still being genuinely useful.
+
+---
+
+### 12.5 — News Feed
+
+- Aggregated from sports news APIs (e.g., ESPN API, NewsAPI with sports filter, or SportsRadar news endpoints)
+- Filtered to user's teams and sports from `user_preferences`
+- Displayed as cards: headline, source, thumbnail image, timestamp
+- Relevant news cards can be linked to cards in the user's collection where a direct player/team match exists (e.g., a Kaprizov injury story surfaces alongside his cards in the collection)
+- Video cards embedded from YouTube: search YouTube Data API for "[team name] highlights" or "[player name] highlights" — no licensing required, links out to YouTube for playback
+
+**News-to-collection linking logic (simple v1):**
+- Extract player names and team names from news headline/tags
+- Cross-reference against `user_cards` table for matching `player_name` or `team`
+- If match found, append a "You own X cards featuring this player" chip to the news card
+
+---
+
+### 12.6 — Card Collection Pulse Widget
+
+This is the homepage feature that makes Card Collector Pro feel unlike anything else in the market. It turns the user's collection from a static inventory into a living, reactive display.
+
+**Phase 1 implementation (current target — sports trigger only, no price data):**
+
+A background job runs after every completed game in the user's followed sports:
+1. Pull final game stats from SportsRadar for all players in that game
+2. Query `user_cards` for any card whose `player_name` matches a player who had a notable performance (defined below)
+3. If match found, write an alert row to `card_alerts` table
+4. Homepage reads `card_alerts` on load and surfaces undismissed alerts in the widget
+
+**"Notable performance" triggers (v1 — configurable):**
+- Goals/points above a threshold (e.g., 2+ goals in hockey, 25+ points in basketball)
+- Team wins a playoff game
+- Player records a milestone (hat trick, triple-double, etc.)
+- Team clinches a playoff spot or division
+
+**Alert card format:**
+```
+┌────────────────────────────────────────┐
+│ 🔥  Kirill Kaprizov — 2 Goals Tonight  │
+│     Wild win 3-1 vs Dallas             │
+│     You own 3 of his cards             │
+│                    [View Cards]  [✕]   │
+└────────────────────────────────────────┘
+```
+
+**DB additions required:**
+```sql
+-- user_preferences table
+user_id          uuid references users
+favorite_sports  text[]
+favorite_teams   text[]
+favorite_players text[]
+created_at       timestamptz
+updated_at       timestamptz
+
+-- card_alerts table
+id               uuid primary key
+user_id          uuid references users
+card_id          uuid references user_cards (nullable — alert can be team-level)
+alert_type       text  -- 'player_performance' | 'team_win' | 'milestone'
+player_name      text
+team_name        text
+message          text
+game_date        date
+dismissed        boolean default false
+created_at       timestamptz
+```
+
+**Phase 2 (future — adds price signals):**
+- Add eBay sold listing API queries for cards in the collection
+- Detect price deltas week-over-week
+- Combine sports trigger + price movement into a richer alert: *"Kaprizov had 2 goals tonight — his rookie cards are up 18% this week on eBay"*
+
+**Phase 3 (future — full intelligence feed):**
+- Injury/trade alerts from SportsRadar news feed
+- Playoff performance correlation patterns
+- "Cards to watch" recommendations based on upcoming schedules
+
+---
+
+### 12.7 — Homepage Personalization Philosophy
+
+The homepage should feel like it was built for one person. Design principles to enforce this:
+
+1. **Never show irrelevant scores.** If the user follows NHL and NFL only, they never see an NBA score.
+2. **Content density over whitespace.** Bleacher Report's most-cited complaint is excessive whitespace. Pack information intelligently.
+3. **Dark mode default.** Consistent with The Athletic's aesthetic — dark palette feels premium, reduces eye strain during night games.
+4. **Dismissable alerts, not notification spam.** The collection pulse widget should feel like a helpful nudge, not an alert system. Everything is dismissable with a single tap.
+5. **Progressive disclosure.** Score strip → tap → full game. Alert card → tap → full collection view. News card → tap → full story. Nothing dumps you into an overwhelming detail page without invitation.
+6. **Preference refinement over time.** As users interact — favoriting players, dismissing irrelevant alerts, clicking certain sport tabs more than others — those signals can feed back into the preference model in Phase 3+.
+
+---
+
+*This section documents decisions made during product design sessions and represents the intended homepage experience for authenticated users. Implementation begins during Phase 2 (Collection Experience) for layout and onboarding, with the Card Pulse Widget and Kalshi feed targeting Phase 4 (Live Sports Integration).*
+
+---
+
 *This document is the single source of truth for Card Collector Pro's vision, strategy, and development approach. All agents and contributors should reference it to stay aligned.*
