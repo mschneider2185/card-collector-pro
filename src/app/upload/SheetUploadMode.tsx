@@ -203,15 +203,17 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ frontDataUrl, backDataUrl, cardId })
         })
-        const json = await res.json() as CardExtractionResult & { error?: string; backImageSaved?: boolean }
+        const json = await res.json() as CardExtractionResult & { error?: string; backImageSaved?: boolean; card_id?: string | null }
         if (!res.ok) {
           console.error(`[backScan] pos ${i} API error:`, json.error)
         } else {
-          if (cardId && !json.backImageSaved) {
-            console.warn(`[backScan] pos ${i}: back image upload failed for card ${cardId}`)
+          if (!json.backImageSaved) {
+            console.warn(`[backScan] pos ${i}: back image upload failed`)
           }
           const prev = snapshot[i]
           updateReviewCard(i, {
+            // Set card_id if the route created/found one (critical for save)
+            card_id: json.card_id ?? prev?.card_id ?? null,
             player_name: json.player_name ?? prev?.player_name ?? '',
             sport: json.sport ?? prev?.sport ?? '',
             year: json.year ?? prev?.year ?? '',
