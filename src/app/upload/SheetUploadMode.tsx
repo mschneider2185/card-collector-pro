@@ -18,7 +18,6 @@ interface ReviewCard {
   card_id: string | null
   needs_review: boolean
   data: CardExtractionResult | null
-  // editable fields
   player_name: string
   sport: string
   year: string
@@ -43,34 +42,18 @@ const POSITION_LABELS = [
 
 function emptyReviewCard(position: number): ReviewCard {
   return {
-    position,
-    card_id: null,
-    needs_review: false,
-    data: null,
-    player_name: '',
-    sport: '',
-    year: String(new Date().getFullYear()),
-    brand: '',
-    set_name: '',
-    card_number: '',
-    team: '',
-    condition: '',
-    quantity: 1,
-    notes: '',
-    rookie: false,
-    autographed: false,
-    patch: false,
-    confirmed: false
+    position, card_id: null, needs_review: false, data: null,
+    player_name: '', sport: '', year: String(new Date().getFullYear()),
+    brand: '', set_name: '', card_number: '', team: '',
+    condition: '', quantity: 1, notes: '',
+    rookie: false, autographed: false, patch: false, confirmed: false
   }
 }
 
 function reviewCardFromBatch(pos: BatchCardPosition, card_id: string | null): ReviewCard {
   const c = pos.card
   return {
-    position: pos.position,
-    card_id,
-    needs_review: pos.needs_review,
-    data: c,
+    position: pos.position, card_id, needs_review: pos.needs_review, data: c,
     player_name: c?.player_name ?? '',
     sport: c?.sport ?? '',
     year: c?.year ?? String(new Date().getFullYear()),
@@ -78,14 +61,40 @@ function reviewCardFromBatch(pos: BatchCardPosition, card_id: string | null): Re
     set_name: c?.set_name ?? '',
     card_number: c?.card_number ?? '',
     team: c?.team_name ?? '',
-    condition: '',
-    quantity: 1,
-    notes: '',
+    condition: '', quantity: 1, notes: '',
     rookie: c?.attributes?.rookie ?? false,
     autographed: c?.attributes?.autographed ?? false,
     patch: c?.attributes?.patch ?? false,
     confirmed: !pos.needs_review && !!c?.player_name
   }
+}
+
+/**
+ * Crop a File into 9 equal cells (row-major) and return data URLs.
+ * Runs entirely client-side via Canvas API.
+ */
+async function cropSheetIntoThumbnails(file: File): Promise<string[]> {
+  return new Promise(resolve => {
+    const img = new window.Image()
+    img.onload = () => {
+      const cw = Math.floor(img.width / 3)
+      const ch = Math.floor(img.height / 3)
+      const crops: string[] = []
+      for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 3; col++) {
+          const canvas = document.createElement('canvas')
+          canvas.width = cw
+          canvas.height = ch
+          const ctx = canvas.getContext('2d')!
+          ctx.drawImage(img, col * cw, row * ch, cw, ch, 0, 0, cw, ch)
+          crops.push(canvas.toDataURL('image/jpeg', 0.85))
+        }
+      }
+      URL.revokeObjectURL(img.src)
+      resolve(crops)
+    }
+    img.src = URL.createObjectURL(file)
+  })
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -100,6 +109,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
   const [stage, setStage] = useState<Stage>('capture')
   const [showCamera, setShowCamera] = useState(false)
   const [sheetPreview, setSheetPreview] = useState<string | null>(null)
+  const [cropThumbnails, setCropThumbnails] = useState<string[]>([])
   const [processingStep, setProcessingStep] = useState('')
   const [slots, setSlots] = useState<SlotState[]>(
     Array.from({ length: 9 }, () => ({ status: 'idle', card: null }))
@@ -111,12 +121,20 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
   const [discardConfirm, setDiscardConfirm] = useState(false)
   const [noGridError, setNoGridError] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const reScanInputRef = useRef<HTMLInputElement>(null)
+  const [reScanPosition, setReScanPosition] = useState<number | null>(null)
 
   // ── Upload & process ──────────────────────────────────────────────────────
 
   const handleFile = async (file: File) => {
-    setSheetPreview(URL.createObjectURL(file))
+    const preview = URL.createObjectURL(file)
+    setSheetPreview(preview)
     setNoGridError(false)
+
+    // Generate per-cell crop thumbnails client-side immediately
+    const crops = await cropSheetIntoThumbnails(file)
+    setCropThumbnails(crops)
+
     await uploadAndProcess(file)
   }
 
@@ -126,7 +144,6 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
     setSlots(Array.from({ length: 9 }, () => ({ status: 'loading', card: null })))
 
     try {
-      // 1. Get a pre-signed upload URL + batchId
       const urlRes = await fetch('/api/uploads/batch-signed-urls', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -139,8 +156,6 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
       }
 
       const { path, token } = urls[0]
-
-      // 2. Upload sheet image via signed upload URL
       const rawExt = file.name.split('.').pop()?.toLowerCase()
       const fileExt = rawExt && rawExt !== 'undefined' ? rawExt : 'jpg'
       const mimeType = file.type || (fileExt === 'png' ? 'image/png' : fileExt === 'webp' ? 'image/webp' : 'image/jpeg')
@@ -148,61 +163,43 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
       const { error: uploadError } = await supabase.storage
         .from('card-uploads')
         .uploadToSignedUrl(path, token, file, { contentType: mimeType })
-
       if (uploadError) throw uploadError
 
-      // 3. Generate a reading preview URL for the Edge function
       const { data: signedData, error: signedError } = await supabase.storage
         .from('card-uploads')
         .createSignedUrl(path, 3600)
       if (signedError || !signedData?.signedUrl) throw new Error('Failed to generate signed URL')
 
-      // 4. Create card_uploads record
       const { data: uploadRecord, error: insertError } = await supabase
         .from('card_uploads')
-        .insert({
-          user_id: user.id,
-          image_path: path,
-          status: 'pending',
-          batch_id: batchId
-        })
+        .insert({ user_id: user.id, image_path: path, status: 'pending', batch_id: batchId })
         .select()
         .single()
       if (insertError) throw insertError
 
       setProcessingStep('Detecting grid...')
 
-      // 5. Stream SSE from process-sheet
       const processRes = await fetch('/api/ai/process-sheet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          batchId,
-          uploadId: uploadRecord.id,
-          sheetSignedUrl: signedData.signedUrl,
-          imagePath: path
+          batchId, uploadId: uploadRecord.id,
+          sheetSignedUrl: signedData.signedUrl, imagePath: path
         })
       })
-
-      if (!processRes.ok || !processRes.body) {
-        throw new Error('Failed to start sheet processing')
-      }
+      if (!processRes.ok || !processRes.body) throw new Error('Failed to start sheet processing')
 
       const reader = processRes.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
       let resolved = false
       let processedCards: ProcessedBatchCard[] = []
-      // Local accumulator avoids stale-closure problem: React state updates
-      // from setSlots() are async, so reading `slots` inside the SSE loop
-      // would always see the initial snapshot. We track card_progress data
-      // here in plain JS and use it when the completed event fires.
+      // Local accumulator — avoids stale React state closure in the async loop
       const cardProgressAccum = new Map<number, BatchCardPosition>()
 
       while (!resolved) {
         const { done, value } = await reader.read()
         if (done) break
-
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
         buffer = lines.pop() || ''
@@ -211,15 +208,12 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
           if (!line.startsWith('data: ')) continue
           try {
             const event = JSON.parse(line.slice(6)) as Record<string, unknown>
-
             if (event.step) {
               setProcessingStep(event.step as string)
             } else if (event.type === 'card_progress') {
               const pos = event.position as number
               const card = event.card as BatchCardPosition
-              // Track in local accumulator (used when building review cards)
               cardProgressAccum.set(pos, card)
-              // Also update UI slots state for the live progress grid
               setSlots(prev => {
                 const next = [...prev]
                 next[pos] = { status: 'done', card }
@@ -235,18 +229,14 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
               const cardMap = new Map<number, ProcessedBatchCard>()
               for (const pc of processedCards) cardMap.set(pc.position, pc)
 
-              // Build review cards from the LOCAL accumulator (not stale state)
               const cards: ReviewCard[] = Array.from({ length: 9 }, (_, i) => {
                 const batchCard = cardProgressAccum.get(i)
                 const pc = cardMap.get(i)
-                if (batchCard) {
-                  return reviewCardFromBatch(batchCard, pc?.card_id ?? null)
-                }
+                if (batchCard) return reviewCardFromBatch(batchCard, pc?.card_id ?? null)
                 const empty = emptyReviewCard(i)
                 if (pc) empty.card_id = pc.card_id
                 return empty
               })
-
               setReviewCards(cards)
               setStage('review')
               resolved = true
@@ -261,7 +251,6 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
         }
       }
 
-      // If the completed event didn't fire, build review from the local accumulator
       if (!resolved) {
         const fallbackCards: ReviewCard[] = Array.from({ length: 9 }, (_, i) => {
           const batchCard = cardProgressAccum.get(i)
@@ -280,52 +269,128 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
     }
   }
 
-  // After SSE stream completes, reviewCards may be empty if the completed event
-  // built them from stale slots state. Rebuild from current slots if needed.
-  const handleReviewStage = () => {
-    if (reviewCards.length === 0) {
-      const cards: ReviewCard[] = slots.map((slot, i) => {
-        if (slot.card) return reviewCardFromBatch(slot.card, null)
-        return emptyReviewCard(i)
+  // ── Per-slot re-scan ──────────────────────────────────────────────────────
+
+  const triggerReScan = (position: number) => {
+    setReScanPosition(position)
+    reScanInputRef.current?.click()
+  }
+
+  const handleReScanFile = async (file: File) => {
+    if (reScanPosition === null) return
+    const pos = reScanPosition
+    setReScanPosition(null)
+
+    // Generate a fresh crop thumbnail for this slot
+    const crops = await cropSheetIntoThumbnails(file)
+    setCropThumbnails(prev => {
+      const next = [...prev]
+      next[pos] = crops[0] // single-card image → just use the full image for this slot
+      return next
+    })
+
+    // Use the existing single-card pipeline for this one slot
+    try {
+      const rawExt = file.name.split('.').pop()?.toLowerCase()
+      const fileExt = rawExt && rawExt !== 'undefined' ? rawExt : 'jpg'
+      const mimeType = file.type || (fileExt === 'png' ? 'image/png' : 'image/jpeg')
+      const fileName = `${user.id}/rescan_${Date.now()}.${fileExt}`
+
+      const { error: upErr } = await supabase.storage
+        .from('card-uploads')
+        .upload(fileName, file, { contentType: mimeType })
+      if (upErr) throw upErr
+
+      const { data: signed } = await supabase.storage
+        .from('card-uploads')
+        .createSignedUrl(fileName, 3600)
+      if (!signed?.signedUrl) throw new Error('Signed URL failed')
+
+      const { data: uploadRecord, error: insertErr } = await supabase
+        .from('card_uploads')
+        .insert({ user_id: user.id, image_path: fileName, status: 'pending' })
+        .select()
+        .single()
+      if (insertErr) throw insertErr
+
+      const res = await fetch('/api/ai/process-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uploadId: uploadRecord.id,
+          imagePath: fileName,
+          frontSignedUrl: signed.signedUrl
+        })
       })
-      setReviewCards(cards)
+      if (!res.ok || !res.body) throw new Error('Re-scan failed')
+
+      const reader = res.body.getReader()
+      const dec = new TextDecoder()
+      let buf = ''
+      let done = false
+      while (!done) {
+        const { done: streamDone, value } = await reader.read()
+        if (streamDone) break
+        buf += dec.decode(value, { stream: true })
+        for (const line of buf.split('\n')) {
+          if (!line.startsWith('data: ')) continue
+          const ev = JSON.parse(line.slice(6)) as Record<string, unknown>
+          if (ev.status === 'completed') {
+            const { data: newCard } = await supabase
+              .from('cards')
+              .select('id')
+              .eq('source_upload_id', uploadRecord.id)
+              .maybeSingle()
+            const extracted = ev.extractedData as CardExtractionResult
+            updateReviewCard(pos, {
+              card_id: newCard?.id ?? null,
+              player_name: extracted.player_name ?? '',
+              sport: extracted.sport ?? '',
+              year: extracted.year ?? String(new Date().getFullYear()),
+              brand: extracted.card_brand ?? '',
+              set_name: extracted.set_name ?? '',
+              card_number: extracted.card_number ?? '',
+              team: extracted.team_name ?? '',
+              rookie: extracted.attributes?.rookie ?? false,
+              autographed: extracted.attributes?.autographed ?? false,
+              patch: extracted.attributes?.patch ?? false,
+              needs_review: false,
+              confirmed: true
+            })
+            done = true
+          } else if (ev.status === 'failed') {
+            alert(`Re-scan failed: ${ev.error}`)
+            done = true
+          }
+        }
+        buf = buf.split('\n').pop() || ''
+      }
+    } catch (err) {
+      alert('Re-scan failed: ' + (err instanceof Error ? err.message : String(err)))
     }
-    setStage('review')
   }
 
   // ── Review helpers ────────────────────────────────────────────────────────
 
   const updateReviewCard = (position: number, updates: Partial<ReviewCard>) => {
-    setReviewCards(prev =>
-      prev.map(c => (c.position === position ? { ...c, ...updates } : c))
-    )
+    setReviewCards(prev => prev.map(c => c.position === position ? { ...c, ...updates } : c))
   }
 
-  const confirmCard = (position: number) => {
-    updateReviewCard(position, { confirmed: true })
-  }
+  const confirmCard = (position: number) => updateReviewCard(position, { confirmed: true })
 
   // ── Save all ─────────────────────────────────────────────────────────────
 
   const saveAll = async () => {
-    // All flagged cards must be confirmed before saving
     const unconfirmed = reviewCards.filter(c => c.needs_review && !c.confirmed && c.card_id)
     if (unconfirmed.length > 0) {
-      alert(`Please review and confirm ${unconfirmed.length} flagged card(s) before saving.`)
+      alert(`Please confirm ${unconfirmed.length} flagged card(s) before saving.`)
       return
     }
-
     setStage('saving')
     setSaveError(null)
-
     try {
       const cardsToSave = reviewCards.filter(c => c.card_id)
-
-      if (cardsToSave.length === 0) {
-        setSavedCount(0)
-        setStage('done')
-        return
-      }
+      if (cardsToSave.length === 0) { setSavedCount(0); setStage('done'); return }
 
       const res = await fetch('/api/user-cards/batch', {
         method: 'POST',
@@ -333,22 +398,14 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
         body: JSON.stringify({
           userId: user.id,
           cards: cardsToSave.map(c => ({
-            position: c.position,
-            card_id: c.card_id!,
-            quantity: c.quantity,
-            condition: c.condition || null,
-            notes: c.notes || null,
-            is_for_trade: false
+            position: c.position, card_id: c.card_id!,
+            quantity: c.quantity, condition: c.condition || null,
+            notes: c.notes || null, is_for_trade: false
           }))
         })
       })
-
       const result = await res.json() as { success: boolean; inserted: number; errors: string[] }
-
-      if (!result.success) {
-        throw new Error(result.errors?.[0] ?? 'Save failed')
-      }
-
+      if (!result.success) throw new Error(result.errors?.[0] ?? 'Save failed')
       setSavedCount(result.inserted)
       setStage('done')
     } catch (err) {
@@ -357,23 +414,19 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
     }
   }
 
-  const handleDiscard = () => {
-    if (stage === 'review') {
-      setDiscardConfirm(true)
-    } else {
-      resetAll()
-    }
-  }
+  const handleDiscard = () => stage === 'review' ? setDiscardConfirm(true) : resetAll()
 
   const resetAll = () => {
     setStage('capture')
     setSheetPreview(null)
+    setCropThumbnails([])
     setSlots(Array.from({ length: 9 }, () => ({ status: 'idle', card: null })))
     setReviewCards([])
     setExpandedSlot(null)
     setDiscardConfirm(false)
     setNoGridError(false)
     setSaveError(null)
+    setReScanPosition(null)
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -386,6 +439,9 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
       />
     )
   }
+
+  const needsReviewCount = reviewCards.filter(c => c.needs_review && !c.confirmed).length
+  const savableCount = reviewCards.filter(c => c.card_id).length
 
   return (
     <div className="space-y-6">
@@ -400,10 +456,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
           <h3 className="text-xl font-bold text-white mb-2">
             {savedCount} card{savedCount !== 1 ? 's' : ''} added to your collection!
           </h3>
-          <button
-            onClick={resetAll}
-            className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
+          <button onClick={resetAll} className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
             Scan Another Sheet
           </button>
         </div>
@@ -414,7 +467,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
         <div className="space-y-4">
           {noGridError && (
             <div className="p-4 bg-red-900/40 border border-red-500 rounded-xl text-red-200 text-sm">
-              No 3×3 grid detected. Make sure the sheet fills the frame and all 9 pockets are visible, then try again.
+              No 3×3 grid detected in that photo. Make sure the sheet fills the frame with all 9 pockets visible, then try again.
             </div>
           )}
 
@@ -422,10 +475,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
             <div className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={sheetPreview} alt="Sheet preview" className="w-full rounded-xl object-contain max-h-64" />
-              <button
-                onClick={resetAll}
-                className="absolute top-2 right-2 w-8 h-8 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-black/80"
-              >
+              <button onClick={resetAll} className="absolute top-2 right-2 w-8 h-8 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-black/80">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -433,41 +483,24 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
             </div>
           ) : (
             <div className="border-2 border-dashed border-white/20 rounded-xl p-10 text-center space-y-4">
-              <div className="text-white/50 text-sm">
-                Photograph a 3×3 binder page with 9 card slots
-              </div>
-
-              {/* 3×3 icon hint */}
+              <div className="text-white/50 text-sm">Photograph a 3×3 binder page with 9 card slots</div>
               <div className="inline-grid grid-cols-3 gap-1 mx-auto opacity-30">
                 {Array.from({ length: 9 }).map((_, i) => (
                   <div key={i} className="w-7 h-9 border border-white rounded-sm" />
                 ))}
               </div>
-
               <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-                <button
-                  onClick={() => setShowCamera(true)}
-                  className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                >
+                <button onClick={() => setShowCamera(true)} className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
                   Open Camera
                 </button>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="px-5 py-2.5 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors text-sm font-medium"
-                >
+                <button onClick={() => fileInputRef.current?.click()} className="px-5 py-2.5 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors text-sm font-medium">
                   Upload Photo
                 </button>
               </div>
             </div>
           )}
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
-          />
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
         </div>
       )}
 
@@ -478,11 +511,9 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
             <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
             <span>{processingStep}</span>
           </div>
-
-          {/* Live 3×3 grid of slot spinners */}
           <div className="grid grid-cols-3 gap-2">
             {slots.map((slot, i) => (
-              <SlotCard key={i} position={i} slot={slot} />
+              <SlotCard key={i} position={i} slot={slot} thumbnail={cropThumbnails[i]} />
             ))}
           </div>
         </div>
@@ -491,47 +522,56 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
       {/* ── REVIEW ── */}
       {stage === 'review' && (
         <div className="space-y-4">
+          {/* Sheet preview strip */}
+          {sheetPreview && (
+            <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/10">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={sheetPreview} alt="Scanned sheet" className="h-16 w-auto rounded object-contain" />
+              <div>
+                <p className="text-white text-sm font-medium">{savableCount} of 9 cards identified</p>
+                <p className="text-white/40 text-xs mt-0.5">
+                  {needsReviewCount > 0
+                    ? `${needsReviewCount} need review before saving`
+                    : 'All cards confirmed — ready to save'}
+                </p>
+              </div>
+              <button onClick={resetAll} className="ml-auto text-white/30 hover:text-white/60 transition-colors text-xs">
+                Rescan
+              </button>
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
-            <h3 className="text-white font-semibold">Review 9 Cards</h3>
-            <span className="text-white/50 text-sm">
-              {reviewCards.filter(c => c.needs_review && !c.confirmed).length > 0
-                ? `${reviewCards.filter(c => c.needs_review && !c.confirmed).length} need review`
-                : 'All clear'}
+            <h3 className="text-white font-semibold">Review {reviewCards.length} Cards</h3>
+            <span className={`text-sm font-medium ${needsReviewCount > 0 ? 'text-amber-400' : 'text-green-400'}`}>
+              {needsReviewCount > 0 ? `${needsReviewCount} need review` : 'All clear'}
             </span>
           </div>
 
           {saveError && (
-            <div className="p-3 bg-red-900/40 border border-red-500 rounded-lg text-red-200 text-sm">
-              {saveError}
-            </div>
+            <div className="p-3 bg-red-900/40 border border-red-500 rounded-lg text-red-200 text-sm">{saveError}</div>
           )}
 
-          {/* 3×3 review grid */}
           <div className="grid grid-cols-3 gap-2">
             {reviewCards.map(card => (
               <ReviewSlot
                 key={card.position}
                 card={card}
+                thumbnail={cropThumbnails[card.position]}
                 isExpanded={expandedSlot === card.position}
                 onToggleExpand={() => setExpandedSlot(prev => prev === card.position ? null : card.position)}
                 onChange={updates => updateReviewCard(card.position, updates)}
                 onConfirm={() => confirmCard(card.position)}
+                onReScan={() => triggerReScan(card.position)}
               />
             ))}
           </div>
 
-          {/* Actions */}
           <div className="flex flex-col sm:flex-row gap-3 pt-2">
-            <button
-              onClick={saveAll}
-              className="flex-1 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors"
-            >
-              Save {reviewCards.filter(c => c.card_id).length} Card{reviewCards.filter(c => c.card_id).length !== 1 ? 's' : ''}
+            <button onClick={saveAll} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors">
+              Save {savableCount} Card{savableCount !== 1 ? 's' : ''}
             </button>
-            <button
-              onClick={handleDiscard}
-              className="flex-1 py-3 bg-white/10 text-white rounded-xl font-semibold hover:bg-white/20 transition-colors"
-            >
+            <button onClick={handleDiscard} className="flex-1 py-3 bg-white/10 text-white rounded-xl font-semibold hover:bg-white/20 transition-colors">
               Discard All
             </button>
           </div>
@@ -550,219 +590,152 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
       {discardConfirm && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-gray-800 rounded-2xl p-6 max-w-sm w-full text-center space-y-4">
-            <h3 className="text-white font-bold text-lg">Discard all 9 cards?</h3>
+            <h3 className="text-white font-bold text-lg">Discard all {reviewCards.length} cards?</h3>
             <p className="text-white/60 text-sm">Any extracted card data will be lost.</p>
             <div className="flex gap-3">
-              <button
-                onClick={resetAll}
-                className="flex-1 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              >
-                Discard
-              </button>
-              <button
-                onClick={() => setDiscardConfirm(false)}
-                className="flex-1 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors"
-              >
-                Cancel
-              </button>
+              <button onClick={resetAll} className="flex-1 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">Discard</button>
+              <button onClick={() => setDiscardConfirm(false)} className="flex-1 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors">Cancel</button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Hidden file inputs */}
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+      <input ref={reScanInputRef} type="file" accept="image/*" className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleReScanFile(f) }} />
     </div>
   )
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function SlotCard({ position, slot }: { position: number; slot: SlotState }) {
+function SlotCard({ position, slot, thumbnail }: { position: number; slot: SlotState; thumbnail?: string }) {
   const label = POSITION_LABELS[position]
   const card = slot.card?.card
 
   return (
-    <div
-      className={`rounded-lg p-2 text-center text-xs transition-all ${
-        slot.status === 'done'
-          ? 'bg-white/10 border border-white/20'
-          : 'bg-white/5 border border-white/10'
-      }`}
-      style={{ minHeight: 80 }}
-    >
-      <div className="text-white/40 mb-1">{label}</div>
-      {slot.status === 'loading' && (
-        <div className="flex items-center justify-center h-10">
+    <div className={`rounded-lg overflow-hidden transition-all border ${
+      slot.status === 'done' ? 'bg-white/10 border-white/20' : 'bg-white/5 border-white/10'
+    }`} style={{ minHeight: 90 }}>
+      {/* Crop thumbnail */}
+      {thumbnail && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={thumbnail} alt={label} className="w-full h-16 object-cover" />
+      )}
+      {!thumbnail && slot.status === 'loading' && (
+        <div className="h-16 flex items-center justify-center">
           <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
         </div>
       )}
-      {slot.status === 'done' && card && (
-        <div className="text-white/80 truncate font-medium" title={card.player_name}>
-          {card.player_name ?? '—'}
-        </div>
-      )}
-      {slot.status === 'done' && !card && (
-        <div className="text-white/30 italic">Empty</div>
-      )}
+      <div className="p-2 text-center text-xs">
+        <div className="text-white/40 mb-0.5">{label}</div>
+        {slot.status === 'done' && card?.player_name && (
+          <div className="text-white/80 truncate font-medium">{card.player_name}</div>
+        )}
+        {slot.status === 'done' && !card?.player_name && (
+          <div className="text-white/30 italic">Empty</div>
+        )}
+        {slot.status === 'loading' && <div className="text-white/30">Scanning...</div>}
+      </div>
     </div>
   )
 }
 
 interface ReviewSlotProps {
   card: ReviewCard
+  thumbnail?: string
   isExpanded: boolean
   onToggleExpand: () => void
   onChange: (updates: Partial<ReviewCard>) => void
   onConfirm: () => void
+  onReScan: () => void
 }
 
-function ReviewSlot({ card, isExpanded, onToggleExpand, onChange, onConfirm }: ReviewSlotProps) {
+function ReviewSlot({ card, thumbnail, isExpanded, onToggleExpand, onChange, onConfirm, onReScan }: ReviewSlotProps) {
   const label = POSITION_LABELS[card.position]
   const isEmpty = !card.card_id && !card.player_name
   const needsAttention = card.needs_review && !card.confirmed
 
   return (
-    <div
-      className={`rounded-lg border transition-all ${
-        isEmpty
-          ? 'border-white/10 bg-white/5'
-          : needsAttention
-          ? 'border-amber-500 bg-amber-950/30'
-          : 'border-white/20 bg-white/8'
-      }`}
-    >
-      {/* Slot header — tap to expand */}
-      <button
-        onClick={onToggleExpand}
-        className="w-full p-2 text-left"
-      >
+    <div className={`rounded-lg border transition-all overflow-hidden ${
+      isEmpty ? 'border-white/10 bg-white/5'
+        : needsAttention ? 'border-amber-500 bg-amber-950/30'
+        : 'border-white/20 bg-white/8'
+    }`}>
+      {/* Crop thumbnail */}
+      {thumbnail && !isEmpty && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={thumbnail} alt={label} className="w-full h-20 object-cover" />
+      )}
+
+      {/* Slot header */}
+      <button onClick={onToggleExpand} className="w-full p-2 text-left">
         <div className="flex items-start justify-between gap-1">
           <div className="min-w-0">
             <div className="text-white/40 text-[10px]">{label}</div>
             {isEmpty ? (
               <div className="text-white/25 text-xs italic">Empty</div>
             ) : (
-              <div className="text-white text-xs font-medium truncate">
-                {card.player_name || '(unnamed)'}
-              </div>
+              <div className="text-white text-xs font-medium truncate">{card.player_name || '(unnamed)'}</div>
             )}
-            {needsAttention && (
-              <div className="text-amber-400 text-[10px] font-semibold mt-0.5">Review needed</div>
-            )}
+            {needsAttention && <div className="text-amber-400 text-[10px] font-semibold mt-0.5">Review needed</div>}
+            {card.confirmed && !isEmpty && <div className="text-green-400 text-[10px] mt-0.5">✓ Confirmed</div>}
           </div>
           {!isEmpty && (
-            <svg
-              className={`w-3 h-3 text-white/30 shrink-0 mt-0.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-              fill="none" stroke="currentColor" viewBox="0 0 24 24"
-            >
+            <svg className={`w-3 h-3 text-white/30 shrink-0 mt-0.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           )}
         </div>
       </button>
 
-      {/* Expanded inline editor */}
+      {/* Expanded editor */}
       {isExpanded && !isEmpty && (
         <div className="px-2 pb-3 space-y-2 border-t border-white/10 pt-2">
-          <Field
-            label="Player"
-            value={card.player_name}
-            onChange={v => onChange({ player_name: v })}
-          />
-          <Field
-            label="Sport"
-            value={card.sport}
-            onChange={v => onChange({ sport: v })}
-          />
-          <Field
-            label="Year"
-            value={card.year}
-            onChange={v => onChange({ year: v })}
-          />
-          <Field
-            label="Brand"
-            value={card.brand}
-            onChange={v => onChange({ brand: v })}
-          />
-          <Field
-            label="Set"
-            value={card.set_name}
-            onChange={v => onChange({ set_name: v })}
-          />
-          <Field
-            label="Card #"
-            value={card.card_number}
-            onChange={v => onChange({ card_number: v })}
-          />
-          <Field
-            label="Team"
-            value={card.team}
-            onChange={v => onChange({ team: v })}
-          />
+          <Field label="Player" value={card.player_name} onChange={v => onChange({ player_name: v })} />
+          <Field label="Sport" value={card.sport} onChange={v => onChange({ sport: v })} />
+          <Field label="Year" value={card.year} onChange={v => onChange({ year: v })} />
+          <Field label="Brand" value={card.brand} onChange={v => onChange({ brand: v })} />
+          <Field label="Set" value={card.set_name} onChange={v => onChange({ set_name: v })} />
+          <Field label="Card #" value={card.card_number} onChange={v => onChange({ card_number: v })} />
+          <Field label="Team" value={card.team} onChange={v => onChange({ team: v })} />
           <div className="flex gap-3 text-[10px] text-white/60">
             <label className="flex items-center gap-1 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={card.rookie}
-                onChange={e => onChange({ rookie: e.target.checked })}
-                className="w-3 h-3"
-              />
-              RC
+              <input type="checkbox" checked={card.rookie} onChange={e => onChange({ rookie: e.target.checked })} className="w-3 h-3" /> RC
             </label>
             <label className="flex items-center gap-1 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={card.autographed}
-                onChange={e => onChange({ autographed: e.target.checked })}
-                className="w-3 h-3"
-              />
-              Auto
+              <input type="checkbox" checked={card.autographed} onChange={e => onChange({ autographed: e.target.checked })} className="w-3 h-3" /> Auto
             </label>
             <label className="flex items-center gap-1 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={card.patch}
-                onChange={e => onChange({ patch: e.target.checked })}
-                className="w-3 h-3"
-              />
-              Patch
+              <input type="checkbox" checked={card.patch} onChange={e => onChange({ patch: e.target.checked })} className="w-3 h-3" /> Patch
             </label>
           </div>
-          <Field
-            label="Condition"
-            value={card.condition}
-            onChange={v => onChange({ condition: v })}
-          />
-          {needsAttention && (
-            <button
-              onClick={onConfirm}
-              className="w-full py-1.5 bg-amber-600 text-white rounded text-xs font-semibold hover:bg-amber-700 transition-colors"
-            >
-              Confirm Card
+          <Field label="Condition" value={card.condition} onChange={v => onChange({ condition: v })} />
+          <div className="flex gap-2 pt-1">
+            {needsAttention && (
+              <button onClick={onConfirm} className="flex-1 py-1.5 bg-amber-600 text-white rounded text-xs font-semibold hover:bg-amber-700 transition-colors">
+                Confirm Card
+              </button>
+            )}
+            <button onClick={onReScan} className="flex-1 py-1.5 bg-blue-700 text-white rounded text-xs font-semibold hover:bg-blue-800 transition-colors">
+              Re-scan
             </button>
-          )}
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-function Field({
-  label,
-  value,
-  onChange
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-}) {
+function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <div>
       <div className="text-white/40 text-[9px] uppercase tracking-wide mb-0.5">{label}</div>
-      <input
-        type="text"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="w-full bg-white/10 border border-white/15 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-blue-400"
-      />
+      <input type="text" value={value} onChange={e => onChange(e.target.value)}
+        className="w-full bg-white/10 border border-white/15 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-blue-400" />
     </div>
   )
 }
