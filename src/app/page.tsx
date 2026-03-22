@@ -137,7 +137,6 @@ export default function Home() {
             background: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
             borderRadius: '4px',
-            divideColor: 'var(--color-border)',
           }}
         >
           {[
