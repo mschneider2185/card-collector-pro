@@ -52,7 +52,7 @@ export function useBatchScan(userId: string) {
     })
 
     try {
-      // 1. Load file into canvas
+      // 1. Load file into full-res canvas (kept for perspective warping later)
       const fileDataUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader()
         reader.onload = () => resolve(reader.result as string)
@@ -61,13 +61,35 @@ export function useBatchScan(userId: string) {
 
       if (abort.signal.aborted) return
 
+      setState(prev => ({ ...prev, processingStep: 'Preparing image...' }))
+
+      // Load full-res canvas first (needed for warp step)
+      const fullResCanvas = await sheetImageToCanvas(fileDataUrl)
+
+      // 2. Resize for detection API — max 2000px on longest side.
+      // The full-res base64 is typically 5-10MB and exceeds Vercel's 4.5MB
+      // Edge body limit. A 2000px image is ~300-600KB base64, well within limits,
+      // and GPT-4o with detail:'high' still detects quad corners accurately.
+      const MAX_DETECT_PX = 2000
+      const scale = Math.min(1, MAX_DETECT_PX / Math.max(fullResCanvas.width, fullResCanvas.height))
+      const detectW = Math.round(fullResCanvas.width * scale)
+      const detectH = Math.round(fullResCanvas.height * scale)
+      const detectCanvas = document.createElement('canvas')
+      detectCanvas.width = detectW
+      detectCanvas.height = detectH
+      const dCtx = detectCanvas.getContext('2d')!
+      dCtx.drawImage(fullResCanvas, 0, 0, detectW, detectH)
+      const detectDataUrl = detectCanvas.toDataURL('image/jpeg', 0.80)
+
       setState(prev => ({ ...prev, processingStep: 'Detecting card positions...' }))
 
-      // 2. POST to /api/ai/detect-sheet
+      if (abort.signal.aborted) return
+
+      // 3. POST downsized image to /api/ai/detect-sheet
       const detectRes = await fetch('/api/ai/detect-sheet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sheetDataUrl: fileDataUrl }),
+        body: JSON.stringify({ sheetDataUrl: detectDataUrl }),
         signal: abort.signal
       })
 
@@ -98,12 +120,13 @@ export function useBatchScan(userId: string) {
 
       if (abort.signal.aborted) return
 
-      // 3. Load sheet into canvas for warping
-      const sourceCanvas = await sheetImageToCanvas(fileDataUrl)
-      const imgW = sourceCanvas.width
-      const imgH = sourceCanvas.height
+      // 4. Scale quad coordinates from detection resolution back to full-res,
+      //    then validate and warp against the full-res canvas.
+      const scaleX = fullResCanvas.width / detectW
+      const scaleY = fullResCanvas.height / detectH
+      const imgW = fullResCanvas.width
+      const imgH = fullResCanvas.height
 
-      // 4. Validate each quad and warp valid ones
       const croppedImages: (string | null)[] = new Array(9).fill(null)
       const flaggedPositions: number[] = []
 
@@ -113,14 +136,20 @@ export function useBatchScan(userId: string) {
           continue
         }
 
-        const isValid = validateQuad(pos.quad, imgW, imgH)
+        // Scale quad corners to full-res pixel space
+        const scaledQuad = pos.quad.map(([x, y]) => [
+          Math.round(x * scaleX),
+          Math.round(y * scaleY)
+        ]) as [[number,number],[number,number],[number,number],[number,number]]
+
+        const isValid = validateQuad(scaledQuad, imgW, imgH)
         if (!isValid) {
           flaggedPositions.push(pos.index)
           continue
         }
 
         try {
-          const warped = warpCardToRect(sourceCanvas, pos.quad, 300, 420)
+          const warped = warpCardToRect(fullResCanvas, scaledQuad, 300, 420)
           croppedImages[pos.index] = resizeCanvasToDataUrl(warped, 900, 1260, 0.85)
         } catch (warpErr) {
           console.error(`Warp failed for position ${pos.index}:`, warpErr)
