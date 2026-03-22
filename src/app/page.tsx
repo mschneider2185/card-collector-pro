@@ -1,3 +1,5 @@
+'use client'
+
 import AuthButton from '@/components/AuthButton'
 import Link from 'next/link'
 
