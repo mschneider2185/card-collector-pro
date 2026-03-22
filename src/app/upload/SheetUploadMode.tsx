@@ -74,37 +74,51 @@ function reviewCardFromBatch(pos: BatchCardPosition, card_id: string | null): Re
  * Runs entirely client-side via Canvas API. Caps each cell at 900px wide.
  */
 /**
- * Crop a sheet into 9 cell images with a 5% inset per edge.
- * The inset removes binder pocket borders and inter-pocket gutters so each
- * crop contains only the card face, not the adjacent card or plastic dividers.
- * The trimmed area is then stretched to fill the output canvas.
+ * Standard 9-pocket binder page geometry (Ultra Pro / BCW / similar).
+ * Measurements: ~5mm border, ~3mm gutter, ~63×88mm pockets on a ~205×280mm page.
+ * Values are fractions of total image width/height, with small extra margins
+ * to account for photo alignment imprecision and pocket wiggle room.
+ *
+ * Each pocket occupies roughly 28% of the page width and 29% of the height,
+ * versus the naive 33.3% that equal-thirds cropping assumes.
  */
-async function cropSheetIntoThumbnails(file: File, insetFraction = 0.05): Promise<string[]> {
+const POCKET_GRID = {
+  cols: [
+    { start: 0.035, end: 0.315 },   // left column
+    { start: 0.350, end: 0.650 },   // center column
+    { start: 0.685, end: 0.965 },   // right column
+  ],
+  rows: [
+    { start: 0.025, end: 0.315 },   // top row
+    { start: 0.345, end: 0.655 },   // middle row
+    { start: 0.685, end: 0.975 },   // bottom row
+  ],
+}
+
+/**
+ * Crop a sheet into 9 cell images using binder-page pocket geometry.
+ * Each crop targets the actual card pocket — not equal thirds — so the
+ * plastic binder border, inter-pocket gutters, and adjacent card bleed
+ * are excluded.  Caps each cell output at 900px wide.
+ */
+async function cropSheetIntoThumbnails(file: File): Promise<string[]> {
   return new Promise(resolve => {
     const img = new window.Image()
     img.onload = () => {
-      const cellW = img.width / 3
-      const cellH = img.height / 3
-      const inX = Math.round(cellW * insetFraction)
-      const inY = Math.round(cellH * insetFraction)
-      const srcW = Math.round(cellW - 2 * inX)
-      const srcH = Math.round(cellH - 2 * inY)
-      const scale = Math.min(1, 900 / srcW)
-      const outW = Math.round(srcW * scale)
-      const outH = Math.round(srcH * scale)
       const crops: string[] = []
       for (let row = 0; row < 3; row++) {
         for (let col = 0; col < 3; col++) {
+          const srcX = Math.round(img.width  * POCKET_GRID.cols[col].start)
+          const srcY = Math.round(img.height * POCKET_GRID.rows[row].start)
+          const srcW = Math.round(img.width  * (POCKET_GRID.cols[col].end - POCKET_GRID.cols[col].start))
+          const srcH = Math.round(img.height * (POCKET_GRID.rows[row].end - POCKET_GRID.rows[row].start))
+          const scale = Math.min(1, 900 / srcW)
+          const outW = Math.round(srcW * scale)
+          const outH = Math.round(srcH * scale)
           const canvas = document.createElement('canvas')
-          canvas.width = outW
-          canvas.height = outH
+          canvas.width = outW; canvas.height = outH
           const ctx = canvas.getContext('2d')!
-          // Source: inset region of this cell — strips pocket borders/gutters
-          ctx.drawImage(
-            img,
-            col * cellW + inX, row * cellH + inY, srcW, srcH,
-            0, 0, outW, outH
-          )
+          ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, outW, outH)
           crops.push(canvas.toDataURL('image/jpeg', 0.85))
         }
       }
@@ -120,34 +134,27 @@ async function cropSheetIntoThumbnails(file: File, insetFraction = 0.05): Promis
  * Front position p at (row r, col c) maps to back image at (row r, col 2-c).
  * Returns array of 9 data URLs where index i = back of card at front-position i.
  */
-async function cropBackSheetIntoThumbnails(file: File, insetFraction = 0.05): Promise<string[]> {
+async function cropBackSheetIntoThumbnails(file: File): Promise<string[]> {
   return new Promise(resolve => {
     const img = new window.Image()
     img.onload = () => {
-      const cellW = img.width / 3
-      const cellH = img.height / 3
-      const inX = Math.round(cellW * insetFraction)
-      const inY = Math.round(cellH * insetFraction)
-      const srcW = Math.round(cellW - 2 * inX)
-      const srcH = Math.round(cellH - 2 * inY)
-      const scale = Math.min(1, 900 / srcW)
-      const outW = Math.round(srcW * scale)
-      const outH = Math.round(srcH * scale)
       // crops[frontPos] = back image for card at front position frontPos
       const crops: string[] = new Array(9)
       for (let row = 0; row < 3; row++) {
         for (let col = 0; col < 3; col++) {
           const frontPos = row * 3 + col
           const backCol = 2 - col // column mirror when page is flipped left→right
+          const srcX = Math.round(img.width  * POCKET_GRID.cols[backCol].start)
+          const srcY = Math.round(img.height * POCKET_GRID.rows[row].start)
+          const srcW = Math.round(img.width  * (POCKET_GRID.cols[backCol].end - POCKET_GRID.cols[backCol].start))
+          const srcH = Math.round(img.height * (POCKET_GRID.rows[row].end - POCKET_GRID.rows[row].start))
+          const scale = Math.min(1, 900 / srcW)
+          const outW = Math.round(srcW * scale)
+          const outH = Math.round(srcH * scale)
           const canvas = document.createElement('canvas')
-          canvas.width = outW
-          canvas.height = outH
+          canvas.width = outW; canvas.height = outH
           const ctx = canvas.getContext('2d')!
-          ctx.drawImage(
-            img,
-            backCol * cellW + inX, row * cellH + inY, srcW, srcH,
-            0, 0, outW, outH
-          )
+          ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, outW, outH)
           crops[frontPos] = canvas.toDataURL('image/jpeg', 0.85)
         }
       }
@@ -346,15 +353,19 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
     const backCrops = await cropBackSheetIntoThumbnails(file)
     setBackCropThumbnails(backCrops)
 
-    // Re-extract all 9 slots sequentially with front+back
+    // Snapshot review cards at call time so we don't fight stale closures
+    // (card_ids and front-scan fallback values are stable from here)
+    const snapshot = [...reviewCards]
+    const frontCrops = [...cropThumbnails]
+
+    // Re-extract all 9 slots sequentially with front+back for QA pass
     for (let i = 0; i < 9; i++) {
-      const frontDataUrl = cropThumbnails[i]
+      const frontDataUrl = frontCrops[i]
       const backDataUrl = backCrops[i]
       if (!frontDataUrl || !backDataUrl) { setBackProgress(i + 1); continue }
 
       try {
-        const reviewCard = reviewCards[i]
-        const cardId = reviewCard?.card_id ?? null
+        const cardId = snapshot[i]?.card_id ?? null
         const res = await fetch('/api/ai/extract-card-dataurl', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -367,17 +378,20 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
           if (cardId && !json.backImageSaved) {
             console.warn(`[backScan] pos ${i}: back image upload failed for card ${cardId}`)
           }
+          // Apply re-extracted data — trust back-scan results over front-only scan
+          // Fall back to original front-scan snapshot values only if GPT returned null
+          const prev = snapshot[i]
           updateReviewCard(i, {
-            player_name: json.player_name ?? reviewCards[i]?.player_name ?? '',
-            sport: json.sport ?? reviewCards[i]?.sport ?? '',
-            year: json.year ?? reviewCards[i]?.year ?? '',
-            brand: json.card_brand ?? reviewCards[i]?.brand ?? '',
-            set_name: json.set_name ?? reviewCards[i]?.set_name ?? '',
-            card_number: json.card_number ?? reviewCards[i]?.card_number ?? '',
-            team: json.team_name ?? reviewCards[i]?.team ?? '',
-            rookie: json.attributes?.rookie ?? reviewCards[i]?.rookie ?? false,
-            autographed: json.attributes?.autographed ?? reviewCards[i]?.autographed ?? false,
-            patch: json.attributes?.patch ?? reviewCards[i]?.patch ?? false,
+            player_name: json.player_name ?? prev?.player_name ?? '',
+            sport: json.sport ?? prev?.sport ?? '',
+            year: json.year ?? prev?.year ?? '',
+            brand: json.card_brand ?? prev?.brand ?? '',
+            set_name: json.set_name ?? prev?.set_name ?? '',
+            card_number: json.card_number ?? prev?.card_number ?? '',
+            team: json.team_name ?? prev?.team ?? '',
+            rookie: json.attributes?.rookie ?? prev?.rookie ?? false,
+            autographed: json.attributes?.autographed ?? prev?.autographed ?? false,
+            patch: json.attributes?.patch ?? prev?.patch ?? false,
             needs_review: false,
             confirmed: true
           })
