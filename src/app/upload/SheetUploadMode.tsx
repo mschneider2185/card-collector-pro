@@ -4,14 +4,10 @@ import { useState, useRef } from 'react'
 import { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import SheetCapture from '@/components/SheetCapture'
+import { useBatchScan } from '@/hooks/useBatchScan'
 import type { BatchCardPosition, ProcessedBatchCard, CardExtractionResult } from '@/types'
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-interface SlotState {
-  status: 'idle' | 'loading' | 'done' | 'error'
-  card: BatchCardPosition | null
-}
+// ---- Types ----
 
 interface ReviewCard {
   position: number
@@ -70,84 +66,27 @@ function reviewCardFromBatch(pos: BatchCardPosition, card_id: string | null): Re
 }
 
 /**
- * Crop a File into 9 equal cells (row-major) and return data URLs.
- * Runs entirely client-side via Canvas API. Caps each cell at 900px wide.
- */
-/**
- * Standard 9-pocket binder page geometry (Ultra Pro / BCW / similar).
- * Measurements: ~5mm border, ~3mm gutter, ~63×88mm pockets on a ~205×280mm page.
- * Values are fractions of total image width/height, with small extra margins
- * to account for photo alignment imprecision and pocket wiggle room.
- *
- * Each pocket occupies roughly 28% of the page width and 29% of the height,
- * versus the naive 33.3% that equal-thirds cropping assumes.
- */
-const POCKET_GRID = {
-  cols: [
-    { start: 0.035, end: 0.315 },   // left column
-    { start: 0.350, end: 0.650 },   // center column
-    { start: 0.685, end: 0.965 },   // right column
-  ],
-  rows: [
-    { start: 0.025, end: 0.315 },   // top row
-    { start: 0.345, end: 0.655 },   // middle row
-    { start: 0.685, end: 0.975 },   // bottom row
-  ],
-}
-
-/**
- * Crop a sheet into 9 cell images using binder-page pocket geometry.
- * Each crop targets the actual card pocket — not equal thirds — so the
- * plastic binder border, inter-pocket gutters, and adjacent card bleed
- * are excluded.  Caps each cell output at 900px wide.
- */
-async function cropSheetIntoThumbnails(file: File): Promise<string[]> {
-  return new Promise(resolve => {
-    const img = new window.Image()
-    img.onload = () => {
-      const crops: string[] = []
-      for (let row = 0; row < 3; row++) {
-        for (let col = 0; col < 3; col++) {
-          const srcX = Math.round(img.width  * POCKET_GRID.cols[col].start)
-          const srcY = Math.round(img.height * POCKET_GRID.rows[row].start)
-          const srcW = Math.round(img.width  * (POCKET_GRID.cols[col].end - POCKET_GRID.cols[col].start))
-          const srcH = Math.round(img.height * (POCKET_GRID.rows[row].end - POCKET_GRID.rows[row].start))
-          const scale = Math.min(1, 900 / srcW)
-          const outW = Math.round(srcW * scale)
-          const outH = Math.round(srcH * scale)
-          const canvas = document.createElement('canvas')
-          canvas.width = outW; canvas.height = outH
-          const ctx = canvas.getContext('2d')!
-          ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, outW, outH)
-          crops.push(canvas.toDataURL('image/jpeg', 0.85))
-        }
-      }
-      URL.revokeObjectURL(img.src)
-      resolve(crops)
-    }
-    img.src = URL.createObjectURL(file)
-  })
-}
-
-/**
  * Crop the BACK of a binder page sheet into 9 thumbnails, column-mirrored.
  * Front position p at (row r, col c) maps to back image at (row r, col 2-c).
  * Returns array of 9 data URLs where index i = back of card at front-position i.
+ *
+ * Uses simple equal-thirds cropping for back images (good enough for text extraction).
  */
 async function cropBackSheetIntoThumbnails(file: File): Promise<string[]> {
   return new Promise(resolve => {
     const img = new window.Image()
     img.onload = () => {
-      // crops[frontPos] = back image for card at front position frontPos
       const crops: string[] = new Array(9)
+      const cellW = img.width / 3
+      const cellH = img.height / 3
       for (let row = 0; row < 3; row++) {
         for (let col = 0; col < 3; col++) {
           const frontPos = row * 3 + col
-          const backCol = 2 - col // column mirror when page is flipped left→right
-          const srcX = Math.round(img.width  * POCKET_GRID.cols[backCol].start)
-          const srcY = Math.round(img.height * POCKET_GRID.rows[row].start)
-          const srcW = Math.round(img.width  * (POCKET_GRID.cols[backCol].end - POCKET_GRID.cols[backCol].start))
-          const srcH = Math.round(img.height * (POCKET_GRID.rows[row].end - POCKET_GRID.rows[row].start))
+          const backCol = 2 - col // column mirror when page is flipped left-to-right
+          const srcX = Math.round(backCol * cellW)
+          const srcY = Math.round(row * cellH)
+          const srcW = Math.round(cellW)
+          const srcH = Math.round(cellH)
           const scale = Math.min(1, 900 / srcW)
           const outW = Math.round(srcW * scale)
           const outH = Math.round(srcH * scale)
@@ -165,7 +104,7 @@ async function cropBackSheetIntoThumbnails(file: File): Promise<string[]> {
   })
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
+// ---- Component ----
 
 interface SheetUploadModeProps {
   user: User
@@ -174,14 +113,12 @@ interface SheetUploadModeProps {
 type Stage = 'capture' | 'processing' | 'review' | 'saving' | 'done'
 
 export default function SheetUploadMode({ user }: SheetUploadModeProps) {
+  // Use the new two-phase batch scan hook
+  const { state: scanState, startScan, reset: resetScan } = useBatchScan(user.id)
+
   const [stage, setStage] = useState<Stage>('capture')
   const [showCamera, setShowCamera] = useState(false)
   const [sheetPreview, setSheetPreview] = useState<string | null>(null)
-  const [cropThumbnails, setCropThumbnails] = useState<string[]>([])
-  const [processingStep, setProcessingStep] = useState('')
-  const [slots, setSlots] = useState<SlotState[]>(
-    Array.from({ length: 9 }, () => ({ status: 'idle', card: null }))
-  )
   const [reviewCards, setReviewCards] = useState<ReviewCard[]>([])
   const [expandedSlot, setExpandedSlot] = useState<number | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -198,153 +135,49 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
   const [backStage, setBackStage] = useState<'idle' | 'processing' | 'done'>('idle')
   const [backProgress, setBackProgress] = useState(0)
 
-  // ── Upload & process ──────────────────────────────────────────────────────
+  // Derive processing state from hook
+  const isProcessing = ['detecting', 'warping', 'extracting'].includes(scanState.phase)
+
+  // When the scan completes, transition to review stage
+  // We track this with a ref to avoid re-running on every render
+  const lastPhaseRef = useRef(scanState.phase)
+  if (scanState.phase !== lastPhaseRef.current) {
+    lastPhaseRef.current = scanState.phase
+
+    if (scanState.phase === 'complete' && stage === 'processing') {
+      // Build review cards from scan results
+      const cardMap = new Map<number, ProcessedBatchCard>()
+      for (const pc of scanState.processedCards) cardMap.set(pc.position, pc)
+
+      const cards: ReviewCard[] = Array.from({ length: 9 }, (_, i) => {
+        const batchCard = scanState.cardProgress.get(i)
+        const pc = cardMap.get(i)
+        if (batchCard) return reviewCardFromBatch(batchCard, pc?.card_id ?? null)
+        const empty = emptyReviewCard(i)
+        if (pc) empty.card_id = pc.card_id
+        return empty
+      })
+      setReviewCards(cards)
+      setStage('review')
+    } else if (scanState.phase === 'error' && stage === 'processing') {
+      if (scanState.error?.includes('No 3x3 grid')) {
+        setNoGridError(true)
+      }
+      setStage('capture')
+    }
+  }
+
+  // ---- Upload & process ----
 
   const handleFile = async (file: File) => {
     const preview = URL.createObjectURL(file)
     setSheetPreview(preview)
     setNoGridError(false)
-
-    // Generate per-cell crop thumbnails client-side immediately
-    const crops = await cropSheetIntoThumbnails(file)
-    setCropThumbnails(crops)
-
-    await uploadAndProcess(file, crops)
-  }
-
-  const uploadAndProcess = async (file: File, cropDataUrls: string[]) => {
     setStage('processing')
-    setProcessingStep('Uploading sheet...')
-    setSlots(Array.from({ length: 9 }, () => ({ status: 'loading', card: null })))
-
-    try {
-      const urlRes = await fetch('/api/uploads/batch-signed-urls', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count: 1, userId: user.id })
-      })
-      if (!urlRes.ok) throw new Error('Failed to generate upload URL')
-      const { batchId, urls } = await urlRes.json() as {
-        batchId: string
-        urls: Array<{ position: number; path: string; signedUrl: string; token: string }>
-      }
-
-      const { path, token } = urls[0]
-      const rawExt = file.name.split('.').pop()?.toLowerCase()
-      const fileExt = rawExt && rawExt !== 'undefined' ? rawExt : 'jpg'
-      const mimeType = file.type || (fileExt === 'png' ? 'image/png' : fileExt === 'webp' ? 'image/webp' : 'image/jpeg')
-
-      const { error: uploadError } = await supabase.storage
-        .from('card-uploads')
-        .uploadToSignedUrl(path, token, file, { contentType: mimeType })
-      if (uploadError) throw uploadError
-
-      const { data: signedData, error: signedError } = await supabase.storage
-        .from('card-uploads')
-        .createSignedUrl(path, 3600)
-      if (signedError || !signedData?.signedUrl) throw new Error('Failed to generate signed URL')
-
-      const { data: uploadRecord, error: insertError } = await supabase
-        .from('card_uploads')
-        .insert({ user_id: user.id, image_path: path, status: 'pending', batch_id: batchId })
-        .select()
-        .single()
-      if (insertError) throw insertError
-
-      setProcessingStep('Detecting grid...')
-
-      const processRes = await fetch('/api/ai/process-sheet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          batchId, uploadId: uploadRecord.id,
-          sheetSignedUrl: signedData.signedUrl, imagePath: path,
-          cropDataUrls
-        })
-      })
-      if (!processRes.ok || !processRes.body) throw new Error('Failed to start sheet processing')
-
-      const reader = processRes.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-      let resolved = false
-      let processedCards: ProcessedBatchCard[] = []
-      // Local accumulator — avoids stale React state closure in the async loop
-      const cardProgressAccum = new Map<number, BatchCardPosition>()
-
-      while (!resolved) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          try {
-            const event = JSON.parse(line.slice(6)) as Record<string, unknown>
-            if (event.step) {
-              setProcessingStep(event.step as string)
-            } else if (event.type === 'card_progress') {
-              const pos = event.position as number
-              const card = event.card as BatchCardPosition
-              cardProgressAccum.set(pos, card)
-              setSlots(prev => {
-                const next = [...prev]
-                next[pos] = { status: 'done', card }
-                return next
-              })
-            } else if (event.type === 'error' && event.reason === 'no_grid_detected') {
-              setNoGridError(true)
-              setStage('capture')
-              setSlots(Array.from({ length: 9 }, () => ({ status: 'idle', card: null })))
-              resolved = true
-            } else if (event.status === 'completed') {
-              processedCards = (event.processedCards as ProcessedBatchCard[]) ?? []
-              const cardMap = new Map<number, ProcessedBatchCard>()
-              for (const pc of processedCards) cardMap.set(pc.position, pc)
-
-              const cards: ReviewCard[] = Array.from({ length: 9 }, (_, i) => {
-                const batchCard = cardProgressAccum.get(i)
-                const pc = cardMap.get(i)
-                if (batchCard) return reviewCardFromBatch(batchCard, pc?.card_id ?? null)
-                const empty = emptyReviewCard(i)
-                if (pc) empty.card_id = pc.card_id
-                return empty
-              })
-              setReviewCards(cards)
-              setStage('review')
-              resolved = true
-            } else if (event.status === 'failed') {
-              throw new Error((event.error as string) || 'Sheet processing failed')
-            }
-          } catch (parseErr) {
-            if (parseErr instanceof Error && parseErr.message !== 'Unexpected end of JSON input') {
-              throw parseErr
-            }
-          }
-        }
-      }
-
-      if (!resolved) {
-        const fallbackCards: ReviewCard[] = Array.from({ length: 9 }, (_, i) => {
-          const batchCard = cardProgressAccum.get(i)
-          if (batchCard) return reviewCardFromBatch(batchCard, null)
-          return emptyReviewCard(i)
-        })
-        setReviewCards(fallbackCards)
-        setStage('review')
-      }
-    } catch (err) {
-      console.error('Sheet upload error:', err)
-      setProcessingStep('')
-      setStage('capture')
-      setSlots(Array.from({ length: 9 }, () => ({ status: 'idle', card: null })))
-      alert((err instanceof Error ? err.message : 'Upload failed') + '. Please try again.')
-    }
+    await startScan(file)
   }
 
-  // ── Back-of-sheet scan ────────────────────────────────────────────────────
+  // ---- Back-of-sheet scan (preserved from original) ----
 
   const handleBackFile = async (file: File) => {
     setBackSheetPreview(URL.createObjectURL(file))
@@ -353,10 +186,9 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
     const backCrops = await cropBackSheetIntoThumbnails(file)
     setBackCropThumbnails(backCrops)
 
-    // Snapshot review cards at call time so we don't fight stale closures
-    // (card_ids and front-scan fallback values are stable from here)
+    // Snapshot review cards and front crops at call time
     const snapshot = [...reviewCards]
-    const frontCrops = [...cropThumbnails]
+    const frontCrops = [...scanState.croppedImages]
 
     // Re-extract all 9 slots sequentially with front+back for QA pass
     for (let i = 0; i < 9; i++) {
@@ -378,8 +210,6 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
           if (cardId && !json.backImageSaved) {
             console.warn(`[backScan] pos ${i}: back image upload failed for card ${cardId}`)
           }
-          // Apply re-extracted data — trust back-scan results over front-only scan
-          // Fall back to original front-scan snapshot values only if GPT returned null
           const prev = snapshot[i]
           updateReviewCard(i, {
             player_name: json.player_name ?? prev?.player_name ?? '',
@@ -404,7 +234,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
     setBackStage('done')
   }
 
-  // ── Per-slot re-scan ──────────────────────────────────────────────────────
+  // ---- Per-slot re-scan ----
 
   const triggerReScan = (position: number) => {
     setReScanPosition(position)
@@ -416,15 +246,6 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
     const pos = reScanPosition
     setReScanPosition(null)
 
-    // Generate a fresh crop thumbnail for this slot
-    const crops = await cropSheetIntoThumbnails(file)
-    setCropThumbnails(prev => {
-      const next = [...prev]
-      next[pos] = crops[0] // single-card image → just use the full image for this slot
-      return next
-    })
-
-    // Use the existing single-card pipeline for this one slot
     try {
       const rawExt = file.name.split('.').pop()?.toLowerCase()
       const fileExt = rawExt && rawExt !== 'undefined' ? rawExt : 'jpg'
@@ -505,7 +326,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
     }
   }
 
-  // ── Review helpers ────────────────────────────────────────────────────────
+  // ---- Review helpers ----
 
   const updateReviewCard = (position: number, updates: Partial<ReviewCard>) => {
     setReviewCards(prev => prev.map(c => c.position === position ? { ...c, ...updates } : c))
@@ -513,7 +334,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
 
   const confirmCard = (position: number) => updateReviewCard(position, { confirmed: true })
 
-  // ── Save all ─────────────────────────────────────────────────────────────
+  // ---- Save all ----
 
   const saveAll = async () => {
     const unconfirmed = reviewCards.filter(c => c.needs_review && !c.confirmed && c.card_id)
@@ -552,10 +373,9 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
   const handleDiscard = () => stage === 'review' ? setDiscardConfirm(true) : resetAll()
 
   const resetAll = () => {
+    resetScan()
     setStage('capture')
     setSheetPreview(null)
-    setCropThumbnails([])
-    setSlots(Array.from({ length: 9 }, () => ({ status: 'idle', card: null })))
     setReviewCards([])
     setExpandedSlot(null)
     setDiscardConfirm(false)
@@ -568,7 +388,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
     setBackProgress(0)
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ---- Render ----
 
   if (showCamera) {
     return (
@@ -582,9 +402,12 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
   const needsReviewCount = reviewCards.filter(c => c.needs_review && !c.confirmed).length
   const savableCount = reviewCards.filter(c => c.card_id).length
 
+  // Build crop thumbnails from scan state
+  const cropThumbnails = scanState.croppedImages
+
   return (
     <div className="space-y-6">
-      {/* ── DONE ── */}
+      {/* ---- DONE ---- */}
       {stage === 'done' && (
         <div className="text-center py-12">
           <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -601,12 +424,12 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
         </div>
       )}
 
-      {/* ── CAPTURE ── */}
+      {/* ---- CAPTURE ---- */}
       {stage === 'capture' && (
         <div className="space-y-4">
           {noGridError && (
             <div className="p-4 bg-red-900/40 border border-red-500 rounded-xl text-red-200 text-sm">
-              No 3×3 grid detected in that photo. Make sure the sheet fills the frame with all 9 pockets visible, then try again.
+              No 3x3 grid detected in that photo. Make sure the sheet fills the frame with all 9 pockets visible, then try again.
             </div>
           )}
 
@@ -622,7 +445,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
             </div>
           ) : (
             <div className="border-2 border-dashed border-white/20 rounded-xl p-10 text-center space-y-4">
-              <div className="text-white/50 text-sm">Photograph a 3×3 binder page with 9 card slots</div>
+              <div className="text-white/50 text-sm">Photograph a 3x3 binder page with 9 card slots</div>
               <div className="inline-grid grid-cols-3 gap-1 mx-auto opacity-30">
                 {Array.from({ length: 9 }).map((_, i) => (
                   <div key={i} className="w-7 h-9 border border-white rounded-sm" />
@@ -641,22 +464,72 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
         </div>
       )}
 
-      {/* ── PROCESSING ── */}
-      {stage === 'processing' && (
+      {/* ---- PROCESSING ---- */}
+      {stage === 'processing' && isProcessing && (
         <div className="space-y-4">
           <div className="flex items-center gap-3 text-white/70 text-sm">
             <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-            <span>{processingStep}</span>
+            <span>{scanState.processingStep || 'Processing...'}</span>
           </div>
+
+          {/* Show phase-specific info */}
+          {scanState.phase === 'detecting' && (
+            <div className="text-white/40 text-xs">Analyzing sheet layout with GPT-4o Vision...</div>
+          )}
+          {scanState.phase === 'warping' && (
+            <div className="text-white/40 text-xs">
+              Correcting perspective for {9 - scanState.flaggedPositions.length} detected cards...
+            </div>
+          )}
+
+          {/* Show grid of cropped images as they become available */}
           <div className="grid grid-cols-3 gap-2">
-            {slots.map((slot, i) => (
-              <SlotCard key={i} position={i} slot={slot} thumbnail={cropThumbnails[i]} />
-            ))}
+            {Array.from({ length: 9 }).map((_, i) => {
+              const cropped = scanState.croppedImages[i]
+              const cardProgress = scanState.cardProgress.get(i)
+              const isFlagged = scanState.flaggedPositions.includes(i)
+
+              return (
+                <div key={i} className={`rounded-lg overflow-hidden transition-all border ${
+                  cardProgress ? 'bg-white/10 border-white/20' : 'bg-white/5 border-white/10'
+                }`} style={{ minHeight: 90 }}>
+                  {cropped ? (
+                    <div className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={cropped} alt={POSITION_LABELS[i]} className="w-full h-auto object-contain" />
+                      {!cardProgress && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                          <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="h-24 flex items-center justify-center">
+                      {isFlagged ? (
+                        <div className="text-amber-400 text-xs">Skipped</div>
+                      ) : (
+                        <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                      )}
+                    </div>
+                  )}
+                  <div className="p-2 text-center text-xs">
+                    <div className="text-white/40 mb-0.5">{POSITION_LABELS[i]}</div>
+                    {cardProgress?.card?.player_name && (
+                      <div className="text-white/80 truncate font-medium">{cardProgress.card.player_name}</div>
+                    )}
+                    {cardProgress && !cardProgress.card?.player_name && (
+                      <div className="text-white/30 italic">Empty</div>
+                    )}
+                    {!cardProgress && !isFlagged && <div className="text-white/30">Scanning...</div>}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
 
-      {/* ── REVIEW ── */}
+      {/* ---- REVIEW ---- */}
       {stage === 'review' && (
         <div className="space-y-4">
           {/* Sheet preview strip */}
@@ -669,7 +542,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
                 <p className="text-white/40 text-xs mt-0.5">
                   {needsReviewCount > 0
                     ? `${needsReviewCount} need review before saving`
-                    : 'All cards confirmed — ready to save'}
+                    : 'All cards confirmed -- ready to save'}
                 </p>
               </div>
               <button onClick={resetAll} className="ml-auto text-white/30 hover:text-white/60 transition-colors text-xs">
@@ -746,7 +619,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
               <ReviewSlot
                 key={card.position}
                 card={card}
-                thumbnail={cropThumbnails[card.position]}
+                thumbnail={cropThumbnails[card.position] ?? undefined}
                 isExpanded={expandedSlot === card.position}
                 onToggleExpand={() => setExpandedSlot(prev => prev === card.position ? null : card.position)}
                 onChange={updates => updateReviewCard(card.position, updates)}
@@ -767,7 +640,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
         </div>
       )}
 
-      {/* ── SAVING ── */}
+      {/* ---- SAVING ---- */}
       {stage === 'saving' && (
         <div className="text-center py-12">
           <div className="w-10 h-10 border-4 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
@@ -775,7 +648,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
         </div>
       )}
 
-      {/* ── DISCARD CONFIRM ── */}
+      {/* ---- DISCARD CONFIRM ---- */}
       {discardConfirm && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-gray-800 rounded-2xl p-6 max-w-sm w-full text-center space-y-4">
@@ -795,51 +668,13 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
       <input ref={reScanInputRef} type="file" accept="image/*" className="hidden"
         onChange={e => { const f = e.target.files?.[0]; if (f) handleReScanFile(f) }} />
 
-      {/* Unused state variable reference to satisfy TypeScript (backCropThumbnails stored for potential future use) */}
+      {/* Unused state variable reference to satisfy TypeScript */}
       {backCropThumbnails.length > 0 && null}
     </div>
   )
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function SlotCard({ position, slot, thumbnail }: { position: number; slot: SlotState; thumbnail?: string }) {
-  const label = POSITION_LABELS[position]
-  const card = slot.card?.card
-
-  return (
-    <div className={`rounded-lg overflow-hidden transition-all border ${
-      slot.status === 'done' ? 'bg-white/10 border-white/20' : 'bg-white/5 border-white/10'
-    }`} style={{ minHeight: 90 }}>
-      {/* Crop thumbnail */}
-      {thumbnail ? (
-        <div className="relative">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={thumbnail} alt={label} className="w-full h-auto object-contain" />
-          {slot.status === 'loading' && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-              <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-            </div>
-          )}
-        </div>
-      ) : slot.status === 'loading' ? (
-        <div className="h-24 flex items-center justify-center">
-          <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-        </div>
-      ) : null}
-      <div className="p-2 text-center text-xs">
-        <div className="text-white/40 mb-0.5">{label}</div>
-        {slot.status === 'done' && card?.player_name && (
-          <div className="text-white/80 truncate font-medium">{card.player_name}</div>
-        )}
-        {slot.status === 'done' && !card?.player_name && (
-          <div className="text-white/30 italic">Empty</div>
-        )}
-        {slot.status === 'loading' && <div className="text-white/30">Scanning...</div>}
-      </div>
-    </div>
-  )
-}
+// ---- Sub-components ----
 
 interface ReviewSlotProps {
   card: ReviewCard
@@ -862,7 +697,7 @@ function ReviewSlot({ card, thumbnail, isExpanded, onToggleExpand, onChange, onC
         : needsAttention ? 'border-amber-500 bg-amber-950/30'
         : 'border-white/20 bg-white/8'
     }`}>
-      {/* Crop thumbnail — full card visible at natural aspect ratio */}
+      {/* Crop thumbnail */}
       {thumbnail && !isEmpty && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={thumbnail} alt={label} className="w-full h-auto object-contain" />
@@ -879,7 +714,7 @@ function ReviewSlot({ card, thumbnail, isExpanded, onToggleExpand, onChange, onC
               <div className="text-white text-xs font-medium truncate">{card.player_name || '(unnamed)'}</div>
             )}
             {needsAttention && <div className="text-amber-400 text-[10px] font-semibold mt-0.5">Review needed</div>}
-            {card.confirmed && !isEmpty && <div className="text-green-400 text-[10px] mt-0.5">✓ Confirmed</div>}
+            {card.confirmed && !isEmpty && <div className="text-green-400 text-[10px] mt-0.5">Confirmed</div>}
           </div>
           {!isEmpty && (
             <svg className={`w-3 h-3 text-white/30 shrink-0 mt-0.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}

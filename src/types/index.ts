@@ -104,6 +104,23 @@ export interface UserCardUpdateData {
   acquired_at?: string | null
 }
 
+// Quad-based detection types (new two-phase pipeline)
+
+/** A single card position's bounding quadrilateral from GPT-4o detection. */
+export interface CardQuad {
+  index: number
+  quad: [[number, number], [number, number], [number, number], [number, number]]
+  confidence: 'high' | 'medium' | 'low'
+  empty: boolean
+  valid: boolean
+}
+
+/** Result of the detection-only GPT-4o call on a 3x3 sheet image. */
+export interface DetectionResult {
+  grid_detected: boolean
+  positions: CardQuad[]
+}
+
 // Batch / sheet scanning types
 
 /** A single card position within a 3×3 binder sheet (row-major: 0=top-left … 8=bottom-right). */
