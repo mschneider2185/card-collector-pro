@@ -217,63 +217,37 @@ export function validateCardData(data: CardExtractionResult): {
  * Post-process extracted data to improve patch detection
  */
 function postProcessPatchDetection(data: CardExtractionResult, ocrText: string): CardExtractionResult {
-  const lowerOcrText = ocrText.toLowerCase()
-  const lowerSetName = data.set_name?.toLowerCase() || ''
-  const lowerBrand = data.card_brand?.toLowerCase() || ''
-  
-  // If patch is already detected, don't change it
+  // If patch is already detected by the AI, trust it
   if (data.attributes?.patch) {
     return data
   }
-  
-  // Enhanced patch detection logic
-  const patchIndicators = [
-    // Card types that typically have patches
-    lowerOcrText.includes('ticket'),
-    lowerOcrText.includes('contenders'),
-    lowerOcrText.includes('prizm'),
-    lowerOcrText.includes('select'),
-    lowerOcrText.includes('flawless'),
-    lowerOcrText.includes('national treasures'),
-    
-    // Set names that suggest patches
-    lowerSetName.includes('ticket'),
-    lowerSetName.includes('contenders'),
-    lowerSetName.includes('prizm'),
-    lowerSetName.includes('select'),
-    lowerSetName.includes('flawless'),
-    lowerSetName.includes('national treasures'),
-    
-    // Brand names that often have patches
-    lowerBrand.includes('panini'),
-    
-    // Ticket stub format indicators
-    lowerOcrText.includes('sec'),
-    lowerOcrText.includes('row'),
-    lowerOcrText.includes('seat'),
-    
-    // Team names in ticket context
-    lowerOcrText.includes('grizzlies') && lowerOcrText.includes('ticket'),
-    
-    // Material indicators
-    lowerOcrText.includes('material'),
-    lowerOcrText.includes('fabric'),
-    lowerOcrText.includes('swatch'),
-    lowerOcrText.includes('relic'),
-    lowerOcrText.includes('game-used'),
-    lowerOcrText.includes('jersey')
+
+  // Only trigger on EXPLICIT, unambiguous embedded-material indicators.
+  // We use word-boundary patterns to avoid false positives from stats tables
+  // (e.g. "row", "sec", "seat" appear constantly in player bios and stats).
+  const text = ocrText.toLowerCase()
+
+  const EXPLICIT_PATCH_PATTERNS = [
+    /\bpatch\b/,
+    /\bgame[- ]used\b/,
+    /\bswatch\b/,
+    /\brelic\b/,
+    /\bfabric\b/,
+    /\bmemorabilium\b/,
+    // jersey only when paired with a material context, not just a jersey number
+    /\bjersey\s*(swatch|patch|relic|piece|card)\b/,
+    /\bgame[- ]worn\b/,
+    /\bauthentic\s+material\b/,
+    // Contenders ticket stub: requires BOTH "contenders" AND "ticket" together
+    /\bcontenders\b.*\bticket\b|\bticket\b.*\bcontenders\b/,
+    // National Treasures is always premium with patches
+    /\bnational\s+treasures\b/,
+    /\bflawless\b/,
   ]
-  
-  const hasPatchIndicator = patchIndicators.some(indicator => indicator)
-  
+
+  const hasPatchIndicator = EXPLICIT_PATCH_PATTERNS.some(re => re.test(text))
+
   if (hasPatchIndicator) {
-    console.log('Post-processing detected patch indicators:', {
-      ocrText: ocrText.substring(0, 200) + '...',
-      set_name: data.set_name,
-      brand: data.card_brand,
-      indicators: patchIndicators.filter(Boolean)
-    })
-    
     return {
       ...data,
       attributes: {
@@ -282,7 +256,7 @@ function postProcessPatchDetection(data: CardExtractionResult, ocrText: string):
       }
     }
   }
-  
+
   return data
 }
 
