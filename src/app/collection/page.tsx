@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import CollectionFilters from './CollectionFilters'
 import CollectionClient from './CollectionClient'
+import CollectionStatsDashboard from '@/components/CollectionStatsDashboard'
 
 interface SearchParams {
   q?: string
@@ -74,6 +75,9 @@ export default async function CollectionPage({
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Stats Dashboard */}
+        <CollectionStatsDashboard />
+
         {/* Filters */}
         <CollectionFilters sports={sports} years={years} />
 
