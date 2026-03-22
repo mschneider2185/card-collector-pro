@@ -770,15 +770,21 @@ function SlotCard({ position, slot, thumbnail }: { position: number; slot: SlotS
       slot.status === 'done' ? 'bg-white/10 border-white/20' : 'bg-white/5 border-white/10'
     }`} style={{ minHeight: 90 }}>
       {/* Crop thumbnail */}
-      {thumbnail && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={thumbnail} alt={label} className="w-full h-16 object-cover" />
-      )}
-      {!thumbnail && slot.status === 'loading' && (
-        <div className="h-16 flex items-center justify-center">
+      {thumbnail ? (
+        <div className="relative">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={thumbnail} alt={label} className="w-full h-auto object-contain" />
+          {slot.status === 'loading' && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+              <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+        </div>
+      ) : slot.status === 'loading' ? (
+        <div className="h-24 flex items-center justify-center">
           <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
         </div>
-      )}
+      ) : null}
       <div className="p-2 text-center text-xs">
         <div className="text-white/40 mb-0.5">{label}</div>
         {slot.status === 'done' && card?.player_name && (
@@ -814,10 +820,10 @@ function ReviewSlot({ card, thumbnail, isExpanded, onToggleExpand, onChange, onC
         : needsAttention ? 'border-amber-500 bg-amber-950/30'
         : 'border-white/20 bg-white/8'
     }`}>
-      {/* Crop thumbnail */}
+      {/* Crop thumbnail — full card visible at natural aspect ratio */}
       {thumbnail && !isEmpty && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={thumbnail} alt={label} className="w-full h-20 object-cover" />
+        <img src={thumbnail} alt={label} className="w-full h-auto object-contain" />
       )}
 
       {/* Slot header */}
