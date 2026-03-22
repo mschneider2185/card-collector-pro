@@ -4,6 +4,21 @@ import { smartCardVisionExtraction, verifyCardMatch } from '@/lib/llm-extraction
 
 export const runtime = 'edge'
 
+type CardSetSubsetType = 'base' | 'rookies' | 'inserts' | 'parallels' | 'autographs' | 'relics' | 'short_prints' | 'variations' | 'other'
+
+function inferSubsetType(
+  setName: string,
+  attributes?: { rookie?: boolean; autographed?: boolean; patch?: boolean }
+): CardSetSubsetType {
+  const lower = setName.toLowerCase()
+  if (attributes?.autographed) return 'autographs'
+  if (attributes?.patch) return 'relics'
+  if (lower.includes('refractor') || lower.includes('parallel') || lower.includes('prizm')) return 'parallels'
+  if (lower.includes('insert')) return 'inserts'
+  if (lower.includes('rookie variation')) return 'rookies'
+  return 'base'
+}
+
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer)
   let binary = ''
@@ -27,9 +42,13 @@ function toDataUrl(buffer: ArrayBuffer, mime: string): string {
 }
 
 // Fetch an image from a pre-signed URL (no auth needed — token is in the URL)
-async function fetchSignedUrl(signedUrl: string, fallbackMime: string): Promise<{ buffer: ArrayBuffer; mime: string }> {
+async function fetchSignedUrl(signedUrl: string | null | undefined, fallbackMime: string): Promise<{ buffer: ArrayBuffer; mime: string }> {
+  if (!signedUrl) throw new Error('No signed URL provided — image may not have uploaded correctly')
   const res = await fetch(signedUrl)
-  if (!res.ok) throw new Error(`Failed to fetch image: ${res.status} ${res.statusText}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Failed to fetch image: ${res.status} ${res.statusText}${body ? ` — ${body}` : ''}`)
+  }
   return {
     buffer: await res.arrayBuffer(),
     mime: res.headers.get('content-type') || fallbackMime
@@ -55,7 +74,10 @@ async function storageUpload(
     },
     body: buffer
   })
-  if (!res.ok) throw new Error(`Failed to upload ${path}: ${res.status} ${res.statusText}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Failed to upload ${path}: ${res.status} ${res.statusText}${body ? ` — ${body}` : ''}`)
+  }
   return `${supabaseUrl}/storage/v1/object/public/${bucket}/${path}`
 }
 
@@ -199,13 +221,53 @@ export async function POST(request: NextRequest) {
           .eq('card_number', cardData.card_number)
           .maybeSingle()
 
+        let cardId: string | null = null
+
         if (existingCard) {
           await supabase
             .from('cards')
             .update({ ...cardData, last_updated: new Date().toISOString() })
             .eq('id', existingCard.id)
+          cardId = existingCard.id
         } else {
-          await supabase.from('cards').insert(cardData)
+          const { data: inserted } = await supabase
+            .from('cards')
+            .insert(cardData)
+            .select('id')
+            .single()
+          cardId = inserted?.id ?? null
+        }
+
+        // Upsert set catalog entry + membership link
+        if (cardId && extractedData.set_name && extractedData.card_brand && parsedYear && extractedData.sport) {
+          const subsetType = inferSubsetType(extractedData.set_name, extractedData.attributes)
+          const { data: setRow } = await supabase
+            .from('card_sets')
+            .upsert(
+              {
+                name: extractedData.set_name,
+                brand: extractedData.card_brand,
+                year: parsedYear,
+                sport: extractedData.sport,
+                subset_type: subsetType,
+              },
+              { onConflict: 'brand,name,year,sport,subset_type', ignoreDuplicates: false }
+            )
+            .select('id')
+            .single()
+
+          if (setRow?.id) {
+            await supabase
+              .from('card_set_memberships')
+              .upsert(
+                {
+                  card_id: cardId,
+                  set_id: setRow.id,
+                  set_card_number: extractedData.card_number ?? null,
+                },
+                { onConflict: 'card_id,set_id', ignoreDuplicates: true }
+              )
+          }
         }
 
         send({ status: 'completed', extractedData })
