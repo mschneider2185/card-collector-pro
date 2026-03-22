@@ -229,15 +229,20 @@ export default function AuthButton() {
           {/* Dropdown Menu */}
           {showDropdown && (
             <div
-              className="absolute right-0 mt-2 w-48 py-1"
-              style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}
               data-dropdown
-              style={{ 
+              style={{
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: '4px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
                 zIndex: 9999,
                 position: 'absolute',
                 top: '100%',
                 right: 0,
-                marginTop: '0.5rem'
+                marginTop: '0.5rem',
+                width: '12rem',
+                paddingTop: '0.25rem',
+                paddingBottom: '0.25rem',
               }}
             >
               <button
@@ -330,8 +335,10 @@ export default function AuthButton() {
         >
           <div
             className="max-w-md w-full mx-4 p-8"
-            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}
             style={{
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: '4px',
               maxHeight: '90vh',
               overflowY: 'auto',
               zIndex: 2147483647,
