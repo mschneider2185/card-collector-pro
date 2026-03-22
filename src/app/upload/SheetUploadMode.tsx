@@ -73,12 +73,22 @@ function reviewCardFromBatch(pos: BatchCardPosition, card_id: string | null): Re
  * Crop a File into 9 equal cells (row-major) and return data URLs.
  * Runs entirely client-side via Canvas API. Caps each cell at 900px wide.
  */
-async function cropSheetIntoThumbnails(file: File): Promise<string[]> {
+/**
+ * Crop a sheet into 9 cell images with a 5% inset per edge.
+ * The inset removes binder pocket borders and inter-pocket gutters so each
+ * crop contains only the card face, not the adjacent card or plastic dividers.
+ * The trimmed area is then stretched to fill the output canvas.
+ */
+async function cropSheetIntoThumbnails(file: File, insetFraction = 0.05): Promise<string[]> {
   return new Promise(resolve => {
     const img = new window.Image()
     img.onload = () => {
-      const srcW = Math.floor(img.width / 3)
-      const srcH = Math.floor(img.height / 3)
+      const cellW = img.width / 3
+      const cellH = img.height / 3
+      const inX = Math.round(cellW * insetFraction)
+      const inY = Math.round(cellH * insetFraction)
+      const srcW = Math.round(cellW - 2 * inX)
+      const srcH = Math.round(cellH - 2 * inY)
       const scale = Math.min(1, 900 / srcW)
       const outW = Math.round(srcW * scale)
       const outH = Math.round(srcH * scale)
@@ -89,8 +99,13 @@ async function cropSheetIntoThumbnails(file: File): Promise<string[]> {
           canvas.width = outW
           canvas.height = outH
           const ctx = canvas.getContext('2d')!
-          ctx.drawImage(img, col * srcW, row * srcH, srcW, srcH, 0, 0, outW, outH)
-          crops.push(canvas.toDataURL('image/jpeg', 0.82))
+          // Source: inset region of this cell — strips pocket borders/gutters
+          ctx.drawImage(
+            img,
+            col * cellW + inX, row * cellH + inY, srcW, srcH,
+            0, 0, outW, outH
+          )
+          crops.push(canvas.toDataURL('image/jpeg', 0.85))
         }
       }
       URL.revokeObjectURL(img.src)
@@ -105,26 +120,35 @@ async function cropSheetIntoThumbnails(file: File): Promise<string[]> {
  * Front position p at (row r, col c) maps to back image at (row r, col 2-c).
  * Returns array of 9 data URLs where index i = back of card at front-position i.
  */
-async function cropBackSheetIntoThumbnails(file: File): Promise<string[]> {
+async function cropBackSheetIntoThumbnails(file: File, insetFraction = 0.05): Promise<string[]> {
   return new Promise(resolve => {
     const img = new window.Image()
     img.onload = () => {
-      const srcW = Math.floor(img.width / 3)
-      const srcH = Math.floor(img.height / 3)
+      const cellW = img.width / 3
+      const cellH = img.height / 3
+      const inX = Math.round(cellW * insetFraction)
+      const inY = Math.round(cellH * insetFraction)
+      const srcW = Math.round(cellW - 2 * inX)
+      const srcH = Math.round(cellH - 2 * inY)
       const scale = Math.min(1, 900 / srcW)
       const outW = Math.round(srcW * scale)
       const outH = Math.round(srcH * scale)
-      const crops: string[] = []
+      // crops[frontPos] = back image for card at front position frontPos
+      const crops: string[] = new Array(9)
       for (let row = 0; row < 3; row++) {
         for (let col = 0; col < 3; col++) {
-          // col 2-col is the mirrored back column
-          const backCol = 2 - col
+          const frontPos = row * 3 + col
+          const backCol = 2 - col // column mirror when page is flipped left→right
           const canvas = document.createElement('canvas')
           canvas.width = outW
           canvas.height = outH
           const ctx = canvas.getContext('2d')!
-          ctx.drawImage(img, backCol * srcW, row * srcH, srcW, srcH, 0, 0, outW, outH)
-          crops.push(canvas.toDataURL('image/jpeg', 0.82))
+          ctx.drawImage(
+            img,
+            backCol * cellW + inX, row * cellH + inY, srcW, srcH,
+            0, 0, outW, outH
+          )
+          crops[frontPos] = canvas.toDataURL('image/jpeg', 0.85)
         }
       }
       URL.revokeObjectURL(img.src)
@@ -330,33 +354,37 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
 
       try {
         const reviewCard = reviewCards[i]
+        const cardId = reviewCard?.card_id ?? null
         const res = await fetch('/api/ai/extract-card-dataurl', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            frontDataUrl,
-            backDataUrl,
-            cardId: reviewCard?.card_id ?? null
-          })
+          body: JSON.stringify({ frontDataUrl, backDataUrl, cardId })
         })
-        if (res.ok) {
-          const extracted = await res.json() as CardExtractionResult
+        const json = await res.json() as CardExtractionResult & { error?: string; backImageSaved?: boolean }
+        if (!res.ok) {
+          console.error(`[backScan] pos ${i} API error:`, json.error)
+        } else {
+          if (cardId && !json.backImageSaved) {
+            console.warn(`[backScan] pos ${i}: back image upload failed for card ${cardId}`)
+          }
           updateReviewCard(i, {
-            player_name: extracted.player_name ?? reviewCards[i]?.player_name ?? '',
-            sport: extracted.sport ?? reviewCards[i]?.sport ?? '',
-            year: extracted.year ?? reviewCards[i]?.year ?? '',
-            brand: extracted.card_brand ?? reviewCards[i]?.brand ?? '',
-            set_name: extracted.set_name ?? reviewCards[i]?.set_name ?? '',
-            card_number: extracted.card_number ?? reviewCards[i]?.card_number ?? '',
-            team: extracted.team_name ?? reviewCards[i]?.team ?? '',
-            rookie: extracted.attributes?.rookie ?? reviewCards[i]?.rookie ?? false,
-            autographed: extracted.attributes?.autographed ?? reviewCards[i]?.autographed ?? false,
-            patch: extracted.attributes?.patch ?? reviewCards[i]?.patch ?? false,
+            player_name: json.player_name ?? reviewCards[i]?.player_name ?? '',
+            sport: json.sport ?? reviewCards[i]?.sport ?? '',
+            year: json.year ?? reviewCards[i]?.year ?? '',
+            brand: json.card_brand ?? reviewCards[i]?.brand ?? '',
+            set_name: json.set_name ?? reviewCards[i]?.set_name ?? '',
+            card_number: json.card_number ?? reviewCards[i]?.card_number ?? '',
+            team: json.team_name ?? reviewCards[i]?.team ?? '',
+            rookie: json.attributes?.rookie ?? reviewCards[i]?.rookie ?? false,
+            autographed: json.attributes?.autographed ?? reviewCards[i]?.autographed ?? false,
+            patch: json.attributes?.patch ?? reviewCards[i]?.patch ?? false,
             needs_review: false,
             confirmed: true
           })
         }
-      } catch { /* ignore per-slot errors */ }
+      } catch (slotErr) {
+        console.error(`[backScan] pos ${i} exception:`, slotErr)
+      }
       setBackProgress(i + 1)
     }
     setBackStage('done')

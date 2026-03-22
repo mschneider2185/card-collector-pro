@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       const c = result
       const parsedYear = c.year ? parseInt(c.year, 10) : null
 
-      // Upload back image to card-images if provided
+      // Upload back image to card-images/card-backs/{cardId}.jpg
       let backImageUrl: string | null = null
       if (backDataUrl?.startsWith('data:')) {
         try {
@@ -88,8 +88,7 @@ export async function POST(request: NextRequest) {
             `card-backs/${cardId}.${ext}`
           )
         } catch (uploadErr) {
-          console.error('Failed to upload back image:', uploadErr)
-          // Non-fatal — proceed without back image URL
+          console.error('[extract-card-dataurl] back image upload failed:', uploadErr)
         }
       }
 
@@ -115,10 +114,20 @@ export async function POST(request: NextRequest) {
         updatePayload.back_image_url = backImageUrl
       }
 
-      await supabase
+      const { error: dbError } = await supabase
         .from('cards')
         .update(updatePayload)
         .eq('id', cardId)
+
+      if (dbError) {
+        console.error('[extract-card-dataurl] DB update failed:', dbError)
+      }
+
+      // Include backImageSaved flag so the client can log if back image persistence failed
+      return new Response(
+        JSON.stringify({ ...result, backImageSaved: !!backImageUrl }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
     }
 
     return new Response(JSON.stringify(result), {
