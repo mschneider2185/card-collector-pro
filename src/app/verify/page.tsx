@@ -41,20 +41,9 @@ export default function VerifyPage() {
   const [loading, setLoading] = useState(true)
   const [selectedUpload, setSelectedUpload] = useState<CardUpload | null>(null)
   const [formData, setFormData] = useState<CardFormData>({
-    year: '',
-    player_name: '',
-    team_name: '',
-    position: '',
-    sport: '',
-    set_name: '',
-    card_brand: '',
-    card_number: '',
-    rookie: false,
-    autographed: false,
-    patch: false,
-    condition: '',
-    quantity: 1,
-    notes: ''
+    year: '', player_name: '', team_name: '', position: '', sport: '',
+    set_name: '', card_brand: '', card_number: '', rookie: false,
+    autographed: false, patch: false, condition: '', quantity: 1, notes: ''
   })
   const [saving, setSaving] = useState(false)
 
@@ -62,12 +51,9 @@ export default function VerifyPage() {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
-      if (user) {
-        loadUploads(user.id)
-      }
+      if (user) loadUploads(user.id)
       setLoading(false)
     }
-
     getUser()
   }, [])
 
@@ -78,46 +64,27 @@ export default function VerifyPage() {
       .eq('user_id', userId)
       .eq('status', 'completed')
       .order('created_at', { ascending: false })
-
-    if (error) {
-      console.error('Error loading uploads:', error)
-    } else {
-      setUploads(data || [])
-    }
+    if (!error) setUploads(data || [])
   }
 
   const selectUpload = (upload: CardUpload) => {
     setSelectedUpload(upload)
-    
-    // Pre-populate form with extracted data
     if (upload.extracted_data) {
-      const data = upload.extracted_data
+      const d = upload.extracted_data
       setFormData({
-        year: data.year || '',
-        player_name: data.player_name || '',
-        team_name: data.team_name || '',
-        position: data.position || '',
-        sport: data.sport || '',
-        set_name: data.set_name || '',
-        card_brand: data.card_brand || '',
-        card_number: data.card_number || '',
-        rookie: data.attributes?.rookie || false,
-        autographed: data.attributes?.autographed || false,
-        patch: data.attributes?.patch || false,
-        condition: '',
-        quantity: 1,
-        notes: ''
+        year: d.year || '', player_name: d.player_name || '', team_name: d.team_name || '',
+        position: d.position || '', sport: d.sport || '', set_name: d.set_name || '',
+        card_brand: d.card_brand || '', card_number: d.card_number || '',
+        rookie: d.attributes?.rookie || false, autographed: d.attributes?.autographed || false,
+        patch: d.attributes?.patch || false, condition: '', quantity: 1, notes: ''
       })
     }
   }
 
   const saveToCollection = async () => {
     if (!user || !selectedUpload) return
-
     setSaving(true)
-    
     try {
-      // First, create or find the card in the cards table
       const { data: existingCard } = await supabase
         .from('cards')
         .select('*')
@@ -130,65 +97,33 @@ export default function VerifyPage() {
         .single()
 
       let cardId: string
-
       if (existingCard) {
         cardId = existingCard.id
       } else {
-        // Create new card entry
-        const { data: { publicUrl } } = supabase.storage
-          .from('card-uploads')
-          .getPublicUrl(selectedUpload.image_path)
-
+        const { data: { publicUrl } } = supabase.storage.from('card-uploads').getPublicUrl(selectedUpload.image_path)
         const { data: newCard, error: createError } = await supabase
           .from('cards')
           .insert({
-            sport: formData.sport,
-            year: parseInt(formData.year),
-            brand: formData.card_brand,
-            series: formData.set_name,
-            set_number: '', // Could be extracted in future
-            card_number: formData.card_number,
-            player_name: formData.player_name,
-            team: formData.team_name,
-            position: formData.position,
-            variation: '', // Could be extracted in future
-            image_url: publicUrl,
-            rookie: formData.rookie,
-            autographed: formData.autographed,
-            patch: formData.patch
+            sport: formData.sport, year: parseInt(formData.year), brand: formData.card_brand,
+            series: formData.set_name, set_number: '', card_number: formData.card_number,
+            player_name: formData.player_name, team: formData.team_name, position: formData.position,
+            variation: '', image_url: publicUrl, rookie: formData.rookie,
+            autographed: formData.autographed, patch: formData.patch
           })
-          .select()
-          .single()
-
+          .select().single()
         if (createError) throw createError
         cardId = newCard.id
       }
 
-      // Add to user's collection
       const { error: collectionError } = await supabase
         .from('user_cards')
-        .insert({
-          user_id: user.id,
-          card_id: cardId,
-          quantity: formData.quantity,
-          condition: formData.condition,
-          notes: formData.notes
-        })
-
+        .insert({ user_id: user.id, card_id: cardId, quantity: formData.quantity, condition: formData.condition, notes: formData.notes })
       if (collectionError) throw collectionError
 
-      // Mark upload as processed
-      await supabase
-        .from('card_uploads')
-        .update({ status: 'processed' })
-        .eq('id', selectedUpload.id)
-
+      await supabase.from('card_uploads').update({ status: 'processed' }).eq('id', selectedUpload.id)
       alert('Card added to your collection successfully!')
-      
-      // Remove from list and clear selection
       setUploads(prev => prev.filter(u => u.id !== selectedUpload.id))
       setSelectedUpload(null)
-
     } catch (error) {
       console.error('Error saving card:', error)
       alert('Error saving card to collection. Please try again.')
@@ -197,84 +132,97 @@ export default function VerifyPage() {
     }
   }
 
+  const inputStyle = {
+    background: 'var(--color-bg)',
+    border: '1px solid var(--color-border)',
+    borderRadius: '2px',
+    color: 'var(--color-text)',
+    fontSize: '0.875rem',
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500"></div>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
+        <div className="w-8 h-8 border-t-2 animate-spin" style={{ borderColor: 'var(--color-accent)', borderRadius: '2px' }} />
       </div>
     )
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center bg-white/80 backdrop-blur-sm p-8 rounded-2xl shadow-xl border border-white/20">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Please sign in to verify cards</h2>
-          <Link href="/" className="text-blue-600 hover:text-blue-800 font-medium">
-            Go back to home
-          </Link>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
+        <div className="text-center p-8" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
+          <h2 className="text-base font-semibold mb-4" style={{ color: 'var(--color-text)' }}>Sign in to verify cards</h2>
+          <Link href="/" className="text-sm" style={{ color: 'var(--color-accent)' }}>Back to home</Link>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-white/20 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <Link href="/" className="flex items-center space-x-2 text-blue-600 hover:text-blue-800 transition-colors">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                <span className="font-medium">Back to Home</span>
-              </Link>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                Verify Cards
-              </h1>
-            </div>
-          </div>
-        </div>
+      <header
+        className="sticky top-0 z-30 flex items-center px-6 h-14 gap-4"
+        style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}
+      >
+        <Link
+          href="/"
+          className="flex items-center gap-1.5 text-sm transition-colors"
+          style={{ color: 'var(--color-text-muted)' }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-text)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-text-muted)')}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Home
+        </Link>
+        <div className="w-px h-4" style={{ background: 'var(--color-border)' }} />
+        <h1 className="text-base font-semibold" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text)' }}>
+          Verify Cards
+        </h1>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* Upload List */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Processed Cards</h2>
-            
+          <div className="p-6" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
+            <h2 className="text-sm font-semibold uppercase tracking-widest mb-5" style={{ color: 'var(--color-text-secondary)' }}>Processed Cards</h2>
+
             {uploads.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              <div className="py-16 flex flex-col items-center text-center">
+                <div className="w-12 h-12 flex items-center justify-center mb-4" style={{ border: '1px solid var(--color-border)', borderRadius: '4px' }}>
+                  <svg className="w-6 h-6" style={{ color: 'var(--color-text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No cards to verify</h3>
-                <p className="text-gray-600 mb-4">Upload some cards first to see them here.</p>
-                <Link 
+                <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text)' }}>No cards to verify</h3>
+                <p className="text-xs mb-5" style={{ color: 'var(--color-text-muted)' }}>Upload some cards first to see them here.</p>
+                <Link
                   href="/upload"
-                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  className="text-xs font-semibold px-4 py-2 transition-opacity hover:opacity-80"
+                  style={{ background: 'var(--color-accent)', color: '#0D0D0D', borderRadius: '4px' }}
                 >
                   Upload Cards
                 </Link>
               </div>
             ) : (
-              <div className="space-y-4">
-                {uploads.map((upload) => (
-                  <div
-                    key={upload.id}
-                    onClick={() => selectUpload(upload)}
-                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                      selectedUpload?.id === upload.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-4">
-                      <div className="relative w-16 h-16 bg-gray-100 rounded-lg overflow-hidden">
+              <div className="space-y-2">
+                {uploads.map((upload) => {
+                  const isSelected = selectedUpload?.id === upload.id
+                  return (
+                    <div
+                      key={upload.id}
+                      onClick={() => selectUpload(upload)}
+                      className="p-3 cursor-pointer flex items-center gap-3 transition-colors"
+                      style={{
+                        border: `1px solid ${isSelected ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                        background: isSelected ? 'rgba(201,168,76,0.06)' : 'var(--color-bg)',
+                        borderRadius: '2px',
+                      }}
+                    >
+                      <div className="relative w-12 h-16 shrink-0 overflow-hidden" style={{ background: 'var(--color-border)', borderRadius: '2px' }}>
                         <Image
                           src={supabase.storage.from('card-uploads').getPublicUrl(upload.image_path).data.publicUrl}
                           alt="Card preview"
@@ -282,260 +230,184 @@ export default function VerifyPage() {
                           className="object-cover"
                         />
                       </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold truncate" style={{ color: 'var(--color-text)' }}>
                           {upload.extracted_data?.player_name || 'Unknown Player'}
-                        </h3>
-                        <p className="text-sm text-gray-600">
+                        </p>
+                        <p className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>
                           {upload.extracted_data?.set_name || 'Unknown Set'}
                         </p>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
-                            upload.confidence_score >= 0.8
-                              ? 'bg-green-100 text-green-800'
-                              : upload.confidence_score >= 0.6
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {Math.round(upload.confidence_score * 100)}% confidence
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          <span
+                            className="text-xs font-semibold px-1.5 py-0.5"
+                            style={{
+                              border: `1px solid ${upload.confidence_score >= 0.8 ? 'var(--color-success)' : upload.confidence_score >= 0.6 ? 'var(--color-accent)' : 'var(--color-error)'}`,
+                              color: upload.confidence_score >= 0.8 ? 'var(--color-success)' : upload.confidence_score >= 0.6 ? 'var(--color-accent)' : 'var(--color-error)',
+                              borderRadius: '2px',
+                              fontFamily: 'var(--font-mono)',
+                            }}
+                          >
+                            {Math.round(upload.confidence_score * 100)}%
                           </span>
                           {upload.extracted_data?.attributes?.rookie && (
-                            <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded-full">
-                              RC
-                            </span>
+                            <span className="text-xs font-semibold px-1.5 py-0.5" style={{ border: '1px solid var(--color-accent)', color: 'var(--color-accent)', borderRadius: '2px', fontFamily: 'var(--font-mono)' }}>RC</span>
                           )}
                           {upload.extracted_data?.attributes?.autographed && (
-                            <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
-                              AUTO
-                            </span>
+                            <span className="text-xs font-semibold px-1.5 py-0.5" style={{ border: '1px solid var(--color-accent)', color: 'var(--color-accent)', borderRadius: '2px', fontFamily: 'var(--font-mono)' }}>AUTO</span>
                           )}
                           {upload.extracted_data?.attributes?.patch && (
-                            <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-orange-100 text-orange-800 rounded-full">
-                              PATCH
-                            </span>
+                            <span className="text-xs font-semibold px-1.5 py-0.5" style={{ border: '1px solid var(--color-accent)', color: 'var(--color-accent)', borderRadius: '2px', fontFamily: 'var(--font-mono)' }}>PATCH</span>
                           )}
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
 
-          {/* Verification and Edit Form */}
+          {/* Verification Form */}
           {selectedUpload && (
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Verify & Edit</h2>
-              
+            <div className="p-6" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
+              <h2 className="text-sm font-semibold uppercase tracking-widest mb-5" style={{ color: 'var(--color-text-secondary)' }}>Verify & Edit</h2>
+
               {/* Card Image */}
-              <div className="mb-6">
-                <div className="relative w-full h-64 bg-gray-100 rounded-xl overflow-hidden">
-                  <Image
-                    src={supabase.storage.from('card-uploads').getPublicUrl(selectedUpload.image_path).data.publicUrl}
-                    alt="Selected card"
-                    fill
-                    className="object-contain"
-                  />
-                </div>
+              <div className="relative w-full h-48 mb-5 overflow-hidden" style={{ background: 'var(--color-bg)', borderRadius: '2px' }}>
+                <Image
+                  src={supabase.storage.from('card-uploads').getPublicUrl(selectedUpload.image_path).data.publicUrl}
+                  alt="Selected card"
+                  fill
+                  className="object-contain"
+                />
               </div>
 
               {/* Form */}
-              <form onSubmit={(e) => { e.preventDefault(); saveToCollection(); }} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Player Name</label>
-                    <input
-                      type="text"
-                      value={formData.player_name}
-                      onChange={(e) => setFormData(prev => ({...prev, player_name: e.target.value}))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Sport</label>
-                    <input
-                      type="text"
-                      value={formData.sport}
-                      onChange={(e) => setFormData(prev => ({...prev, sport: e.target.value}))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
-                    <input
-                      type="text"
-                      value={formData.year}
-                      onChange={(e) => setFormData(prev => ({...prev, year: e.target.value}))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Team</label>
-                    <input
-                      type="text"
-                      value={formData.team_name}
-                      onChange={(e) => setFormData(prev => ({...prev, team_name: e.target.value}))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
-                    <input
-                      type="text"
-                      value={formData.position}
-                      onChange={(e) => setFormData(prev => ({...prev, position: e.target.value}))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Card Brand</label>
-                    <input
-                      type="text"
-                      value={formData.card_brand}
-                      onChange={(e) => setFormData(prev => ({...prev, card_brand: e.target.value}))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Set Name</label>
-                    <input
-                      type="text"
-                      value={formData.set_name}
-                      onChange={(e) => setFormData(prev => ({...prev, set_name: e.target.value}))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Card Number</label>
-                    <input
-                      type="text"
-                      value={formData.card_number}
-                      onChange={(e) => setFormData(prev => ({...prev, card_number: e.target.value}))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
+              <form onSubmit={(e) => { e.preventDefault(); saveToCollection() }} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    { label: 'Player Name', key: 'player_name', required: true },
+                    { label: 'Sport', key: 'sport', required: true },
+                    { label: 'Year', key: 'year' },
+                    { label: 'Team', key: 'team_name' },
+                    { label: 'Position', key: 'position' },
+                    { label: 'Card Brand', key: 'card_brand' },
+                    { label: 'Set Name', key: 'set_name' },
+                    { label: 'Card Number', key: 'card_number' },
+                  ].map(({ label, key, required }) => (
+                    <div key={key}>
+                      <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--color-text-muted)' }}>{label}</label>
+                      <input
+                        type="text"
+                        value={formData[key as keyof CardFormData] as string}
+                        onChange={(e) => setFormData(prev => ({ ...prev, [key]: e.target.value }))}
+                        className="w-full px-3 py-2 focus:outline-none"
+                        style={inputStyle}
+                        required={required}
+                      />
+                    </div>
+                  ))}
                 </div>
 
-                {/* Special Attributes */}
+                {/* Attributes */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Special Attributes</label>
-                  <div className="flex flex-wrap gap-4">
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={formData.rookie}
-                        onChange={(e) => setFormData(prev => ({...prev, rookie: e.target.checked}))}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">Rookie Card</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={formData.autographed}
-                        onChange={(e) => setFormData(prev => ({...prev, autographed: e.target.checked}))}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">Autographed</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={formData.patch}
-                        onChange={(e) => setFormData(prev => ({...prev, patch: e.target.checked}))}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">Patch Card</span>
-                    </label>
+                  <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--color-text-muted)' }}>Attributes</p>
+                  <div className="flex flex-wrap gap-3">
+                    {[
+                      { label: 'Rookie Card', key: 'rookie' },
+                      { label: 'Autographed', key: 'autographed' },
+                      { label: 'Patch Card', key: 'patch' },
+                    ].map(({ label, key }) => (
+                      <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+                        <div
+                          onClick={() => setFormData(prev => ({ ...prev, [key]: !prev[key as keyof CardFormData] }))}
+                          className="w-4 h-4 flex items-center justify-center transition-colors"
+                          style={{
+                            border: `1px solid ${formData[key as keyof CardFormData] ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                            background: formData[key as keyof CardFormData] ? 'var(--color-accent)' : 'transparent',
+                            borderRadius: '2px',
+                          }}
+                        >
+                          {formData[key as keyof CardFormData] && (
+                            <svg className="w-2.5 h-2.5" fill="none" stroke="#0D0D0D" viewBox="0 0 24 24" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+                        <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>{label}</span>
+                      </label>
+                    ))}
                   </div>
                 </div>
 
                 {/* Collection Details */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Condition</label>
+                    <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--color-text-muted)' }}>Condition</label>
                     <select
                       value={formData.condition}
-                      onChange={(e) => setFormData(prev => ({...prev, condition: e.target.value}))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      onChange={(e) => setFormData(prev => ({ ...prev, condition: e.target.value }))}
+                      className="w-full px-3 py-2 focus:outline-none"
+                      style={inputStyle}
                       required
                     >
                       <option value="">Select condition</option>
-                      <option value="Mint">Mint</option>
-                      <option value="Near Mint">Near Mint</option>
-                      <option value="Excellent">Excellent</option>
-                      <option value="Very Good">Very Good</option>
-                      <option value="Good">Good</option>
-                      <option value="Fair">Fair</option>
-                      <option value="Poor">Poor</option>
+                      {['Mint', 'Near Mint', 'Excellent', 'Very Good', 'Good', 'Fair', 'Poor'].map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                    <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--color-text-muted)' }}>Quantity</label>
                     <input
                       type="number"
                       value={formData.quantity}
-                      onChange={(e) => setFormData(prev => ({...prev, quantity: parseInt(e.target.value) || 1}))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      min="1"
-                      max="100"
-                      required
+                      onChange={(e) => setFormData(prev => ({ ...prev, quantity: parseInt(e.target.value) || 1 }))}
+                      className="w-full px-3 py-2 focus:outline-none"
+                      style={inputStyle}
+                      min="1" max="100" required
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                  <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--color-text-muted)' }}>Notes</label>
                   <textarea
                     value={formData.notes}
-                    onChange={(e) => setFormData(prev => ({...prev, notes: e.target.value}))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full px-3 py-2 focus:outline-none resize-none"
+                    style={inputStyle}
                     rows={3}
                     placeholder="Any additional notes..."
                   />
                 </div>
 
-                <div className="flex justify-end space-x-4 pt-4">
+                <div className="flex justify-end gap-3 pt-2">
                   <button
                     type="button"
                     onClick={() => setSelectedUpload(null)}
-                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="px-5 py-2 text-sm font-medium transition-colors"
+                    style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: '4px' }}
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={saving}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    className="px-5 py-2 text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{ background: 'var(--color-accent)', color: '#0D0D0D', borderRadius: '4px' }}
                   >
                     {saving ? 'Saving...' : 'Add to Collection'}
                   </button>
                 </div>
               </form>
 
-              {/* Debug Info (if available) */}
               {selectedUpload.ocr_text && (
-                <details className="mt-6 p-4 bg-gray-50 rounded-lg">
-                  <summary className="cursor-pointer font-medium text-gray-700">Debug Info</summary>
-                  <div className="mt-2 space-y-2">
-                    <div>
-                      <h4 className="font-medium text-gray-700">OCR Text:</h4>
-                      <pre className="text-xs text-gray-600 whitespace-pre-wrap bg-white p-2 rounded border">
-                        {selectedUpload.ocr_text}
-                      </pre>
-                    </div>
-                    {selectedUpload.processing_metadata && (
-                      <div>
-                        <h4 className="font-medium text-gray-700">Processing Metadata:</h4>
-                        <pre className="text-xs text-gray-600 whitespace-pre-wrap bg-white p-2 rounded border">
-                          {JSON.stringify(selectedUpload.processing_metadata, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                  </div>
+                <details className="mt-5 p-4" style={{ background: 'var(--color-bg)', borderRadius: '2px', border: '1px solid var(--color-border)' }}>
+                  <summary className="cursor-pointer text-xs uppercase tracking-widest font-medium" style={{ color: 'var(--color-text-muted)' }}>Debug Info</summary>
+                  <pre className="mt-3 text-xs whitespace-pre-wrap" style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                    {selectedUpload.ocr_text}
+                  </pre>
                 </details>
               )}
             </div>

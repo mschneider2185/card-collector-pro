@@ -68,16 +68,21 @@ export default function AvatarUploader({
   return (
     <div className="flex items-center gap-4">
       {/* Avatar Preview */}
-      <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
+      <div
+        className="w-14 h-14 overflow-hidden flex items-center justify-center"
+        style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '2px' }}
+      >
         {currentAvatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img 
-            src={currentAvatarUrl} 
-            alt="Avatar" 
+          <img
+            src={currentAvatarUrl}
+            alt="Avatar"
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="text-gray-400 text-sm">No avatar</div>
+          <svg className="w-6 h-6" style={{ color: 'var(--color-text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
         )}
       </div>
 
@@ -93,9 +98,10 @@ export default function AvatarUploader({
         <button
           type="button"
           disabled={uploading}
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          className="px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: '2px' }}
         >
-          {uploading ? 'Uploading...' : 'Change Avatar'}
+          {uploading ? 'Uploading...' : 'Change photo'}
         </button>
       </div>
     </div>

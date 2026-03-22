@@ -78,19 +78,19 @@ function computeStats(rows: RawRow[]): StatsData {
   }
 }
 
-// ─── Sport colors ─────────────────────────────────────────────────────────────
+// ─── Sport colors (uses accent + semantic palette) ────────────────────────────
 
 const SPORT_COLORS: Record<string, string> = {
-  baseball: '#3b82f6',
-  basketball: '#f97316',
-  football: '#22c55e',
-  hockey: '#06b6d4',
-  pokemon: '#eab308',
-  soccer: '#a855f7',
+  baseball:   '#C9A84C',
+  basketball: '#C9A84C',
+  football:   '#C9A84C',
+  hockey:     '#C9A84C',
+  pokemon:    '#C9A84C',
+  soccer:     '#C9A84C',
 }
 
 function sportColor(sport: string): string {
-  return SPORT_COLORS[sport.toLowerCase()] ?? '#6b7280'
+  return SPORT_COLORS[sport.toLowerCase()] ?? '#C9A84C'
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -98,7 +98,6 @@ function sportColor(sport: string): string {
 function StatCard({
   label,
   value,
-  color,
   icon,
 }: {
   label: string
@@ -107,14 +106,24 @@ function StatCard({
   icon: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-1 bg-white/60 backdrop-blur-sm border border-white/40 rounded-xl px-3 py-3.5 shadow-sm">
+    <div
+      className="flex flex-col gap-1 px-4 py-3"
+      style={{
+        background: 'var(--color-bg)',
+        border: '1px solid var(--color-border)',
+        borderRadius: '2px',
+      }}
+    >
       <div className="flex items-center gap-1.5">
-        <span className="opacity-70">{icon}</span>
-        <span className="text-2xl sm:text-3xl font-extrabold tabular-nums" style={{ color }}>
+        <span style={{ color: 'var(--color-accent)', opacity: 0.8 }}>{icon}</span>
+        <span
+          className="text-xl font-bold tabular-nums"
+          style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-accent)' }}
+        >
           {value.toLocaleString()}
         </span>
       </div>
-      <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide leading-none">
+      <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--color-text-muted)', letterSpacing: '0.08em' }}>
         {label}
       </span>
     </div>
@@ -137,12 +146,12 @@ function HorizontalBar({
   const pct = max > 0 ? (count / max) * 100 : 0
   return (
     <div className="flex items-center gap-2.5 min-w-0">
-      <span className={`text-[11px] text-gray-600 font-medium ${labelWidth} truncate shrink-0 capitalize`}>
+      <span className={`text-[11px] font-medium ${labelWidth} truncate shrink-0 capitalize`} style={{ color: 'var(--color-text-secondary)' }}>
         {name}
       </span>
-      <div className="flex-1 relative h-2 rounded-full bg-black/5 overflow-hidden">
+      <div className="flex-1 relative h-1 overflow-hidden" style={{ background: 'var(--color-border)' }}>
         <div
-          className="absolute inset-y-0 left-0 rounded-full"
+          className="absolute inset-y-0 left-0"
           style={{
             width: `${pct}%`,
             backgroundColor: color,
@@ -150,7 +159,7 @@ function HorizontalBar({
           }}
         />
       </div>
-      <span className="text-[11px] font-bold text-gray-700 w-7 text-right shrink-0 tabular-nums">
+      <span className="text-[11px] font-semibold w-7 text-right shrink-0 tabular-nums" style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)' }}>
         {count}
       </span>
     </div>
@@ -159,7 +168,7 @@ function HorizontalBar({
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest mb-2">
+    <h3 className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--color-text-muted)', letterSpacing: '0.1em' }}>
       {children}
     </h3>
   )
@@ -170,20 +179,20 @@ function SkeletonDashboard() {
     <div className="p-5 space-y-5 animate-pulse">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-[72px] bg-gray-200/50 rounded-xl" />
+          <div key={i} className="h-16" style={{ background: 'var(--color-border)', borderRadius: '2px' }} />
         ))}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div className="space-y-2.5">
-          <div className="h-3 w-16 bg-gray-200/60 rounded" />
+          <div className="h-2 w-16" style={{ background: 'var(--color-border)' }} />
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-2.5 bg-gray-200/50 rounded-full" />
+            <div key={i} className="h-1.5" style={{ background: 'var(--color-border)' }} />
           ))}
         </div>
         <div className="space-y-2.5">
-          <div className="h-3 w-16 bg-gray-200/60 rounded" />
+          <div className="h-2 w-16" style={{ background: 'var(--color-border)' }} />
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-2.5 bg-gray-200/50 rounded-full" />
+            <div key={i} className="h-1.5" style={{ background: 'var(--color-border)' }} />
           ))}
         </div>
       </div>
@@ -270,18 +279,27 @@ export default function CollectionStatsDashboard() {
   const maxYear = Math.max(1, ...(stats?.byYear.map((y) => y.count) ?? [1]))
 
   return (
-    <div className="mb-6">
-      <div className="bg-white/80 backdrop-blur-md border border-white/30 rounded-2xl shadow-lg overflow-hidden">
+    <div className="mb-5">
+      <div
+        className="overflow-hidden"
+        style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: '4px',
+        }}
+      >
         {/* ── Header ── */}
         <button
           onClick={toggleCollapsed}
-          className="w-full flex items-center justify-between px-5 py-3.5 border-b border-white/30 hover:bg-white/30 transition-colors group"
+          className="w-full flex items-center justify-between px-5 py-3 group transition-colors"
+          style={{ borderBottom: '1px solid var(--color-border)' }}
           aria-expanded={!collapsed}
           aria-label={collapsed ? 'Expand collection stats' : 'Collapse collection stats'}
         >
           <div className="flex items-center gap-2">
             <svg
-              className="w-4 h-4 text-blue-600 shrink-0"
+              className="w-3.5 h-3.5 shrink-0"
+              style={{ color: 'var(--color-accent)' }}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -289,28 +307,27 @@ export default function CollectionStatsDashboard() {
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth={2}
+                strokeWidth={1.5}
                 d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
               />
             </svg>
-            <span className="text-sm font-bold bg-gradient-to-r from-gray-900 via-blue-900 to-indigo-700 bg-clip-text text-transparent">
+            <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--color-text-secondary)', letterSpacing: '0.08em' }}>
               Collection Stats
             </span>
             {!loading && stats && (
-              <span className="text-xs text-gray-400 font-medium">
-                · {stats.total.toLocaleString()} cards
+              <span className="text-xs tabular-nums" style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>
+                — {stats.total.toLocaleString()} cards
               </span>
             )}
           </div>
           <svg
-            className={`w-4 h-4 text-gray-400 group-hover:text-gray-600 transition-transform duration-200 ${
-              collapsed ? '-rotate-90' : ''
-            }`}
+            className={`w-3.5 h-3.5 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`}
+            style={{ color: 'var(--color-text-muted)' }}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
 
@@ -326,40 +343,40 @@ export default function CollectionStatsDashboard() {
                   <StatCard
                     label="Total Cards"
                     value={stats.total}
-                    color="#3b82f6"
+                    color="#C9A84C"
                     icon={
-                      <svg className="w-4 h-4 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6z" />
                       </svg>
                     }
                   />
                   <StatCard
-                    label="Rookie Cards"
+                    label="Rookies"
                     value={stats.rookieCount}
-                    color="#f97316"
+                    color="#C9A84C"
                     icon={
-                      <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                       </svg>
                     }
                   />
                   <StatCard
                     label="Autographs"
                     value={stats.autographCount}
-                    color="#8b5cf6"
+                    color="#C9A84C"
                     icon={
-                      <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                       </svg>
                     }
                   />
                   <StatCard
                     label="Patches"
                     value={stats.patchCount}
-                    color="#10b981"
+                    color="#C9A84C"
                     icon={
-                      <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                       </svg>
                     }
                   />
@@ -395,7 +412,7 @@ export default function CollectionStatsDashboard() {
                               name={b.name}
                               count={b.count}
                               max={maxBrand}
-                              color="#6366f1"
+                              color="#C9A84C"
                               labelWidth="w-28"
                             />
                           ))}
@@ -421,20 +438,23 @@ export default function CollectionStatsDashboard() {
                               style={{ minWidth: 26 }}
                             >
                               {/* Count tooltip on hover */}
-                              <span className="text-[9px] font-bold text-blue-600 opacity-0 group-hover/bar:opacity-100 transition-opacity tabular-nums">
+                              <span className="text-[9px] font-semibold opacity-0 group-hover/bar:opacity-100 transition-opacity tabular-nums" style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-accent)' }}>
                                 {y.count}
                               </span>
                               <div
-                                className="w-4 rounded-t-sm bg-gradient-to-t from-blue-500 to-indigo-400 hover:from-blue-400 hover:to-indigo-300 transition-colors cursor-default"
+                                className="w-3 cursor-default"
                                 style={{
                                   height: `${barH}px`,
+                                  background: 'var(--color-accent)',
+                                  opacity: 0.7,
                                   transition: 'height 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
                                 }}
                                 title={`${y.year}: ${y.count} card${y.count !== 1 ? 's' : ''}`}
                               />
                               <span
-                                className="text-[9px] text-gray-400 leading-none"
+                                className="text-[9px] leading-none"
                                 style={{
+                                  color: 'var(--color-text-muted)',
                                   writingMode: 'vertical-rl',
                                   transform: 'rotate(180deg)',
                                 }}
@@ -457,10 +477,11 @@ export default function CollectionStatsDashboard() {
                       {stats.topSets.map((s) => (
                         <div
                           key={s.label}
-                          className="flex items-center justify-between gap-3 py-1 border-b border-white/20"
+                          className="flex items-center justify-between gap-3 py-1"
+                          style={{ borderBottom: '1px solid var(--color-border)' }}
                         >
-                          <span className="text-xs text-gray-700 truncate leading-snug">{s.label}</span>
-                          <span className="text-[11px] font-bold text-gray-600 shrink-0 bg-gray-100/70 px-2 py-0.5 rounded-full tabular-nums">
+                          <span className="text-xs truncate leading-snug" style={{ color: 'var(--color-text-secondary)' }}>{s.label}</span>
+                          <span className="text-[11px] font-semibold shrink-0 px-1.5 py-0.5 tabular-nums" style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-accent)', border: '1px solid var(--color-border)', borderRadius: '2px' }}>
                             {s.count}
                           </span>
                         </div>

@@ -47,28 +47,38 @@ export default function CardsFilters({ sports, years }: CardsFiltersProps) {
     updateURL()
   }, [sport, year, rookie, auto, patch, updateURL])
 
+  const selectStyle = {
+    background: 'var(--color-bg)',
+    border: '1px solid var(--color-border)',
+    borderRadius: '2px',
+    color: 'var(--color-text)',
+    fontSize: '0.875rem',
+  }
+
   return (
-    <div className="mb-8 bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-xl border border-white/20">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+    <div className="mb-6 p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         {/* Search */}
         <div className="relative lg:col-span-2">
-          <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--color-text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <input
             type="text"
-            placeholder="Search by player, brand, or series..."
+            placeholder="Search player, brand, series..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white/50 backdrop-blur-sm"
+            className="w-full pl-9 pr-4 py-2 text-sm focus:outline-none"
+            style={selectStyle}
           />
         </div>
-        
+
         {/* Sport Filter */}
         <select
           value={sport}
           onChange={(e) => setSport(e.target.value)}
-          className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white/50 backdrop-blur-sm"
+          className="px-3 py-2 text-sm focus:outline-none"
+          style={selectStyle}
         >
           <option value="">All Sports</option>
           {sports.map(sportOption => (
@@ -82,7 +92,8 @@ export default function CardsFilters({ sports, years }: CardsFiltersProps) {
         <select
           value={year}
           onChange={(e) => setYear(e.target.value)}
-          className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white/50 backdrop-blur-sm"
+          className="px-3 py-2 text-sm focus:outline-none"
+          style={selectStyle}
         >
           <option value="">All Years</option>
           {years.map(yearOption => (
@@ -91,36 +102,31 @@ export default function CardsFilters({ sports, years }: CardsFiltersProps) {
         </select>
 
         {/* Attribute Filters */}
-        <div className="flex flex-wrap gap-2 lg:col-span-2">
-          <label className="flex items-center space-x-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={rookie}
-              onChange={(e) => setRookie(e.target.checked)}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            />
-            <span className="text-sm font-medium text-gray-700">Rookie</span>
-          </label>
-          
-          <label className="flex items-center space-x-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={auto}
-              onChange={(e) => setAuto(e.target.checked)}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            />
-            <span className="text-sm font-medium text-gray-700">Auto</span>
-          </label>
-          
-          <label className="flex items-center space-x-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={patch}
-              onChange={(e) => setPatch(e.target.checked)}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            />
-            <span className="text-sm font-medium text-gray-700">Patch</span>
-          </label>
+        <div className="flex flex-wrap gap-2 items-center lg:col-span-2">
+          {[
+            { label: 'RC', checked: rookie, onChange: setRookie },
+            { label: 'AUTO', checked: auto, onChange: setAuto },
+            { label: 'PATCH', checked: patch, onChange: setPatch },
+          ].map(({ label, checked, onChange }) => (
+            <label key={label} className="flex items-center gap-1.5 cursor-pointer select-none">
+              <div
+                onClick={() => onChange(!checked)}
+                className="w-4 h-4 flex items-center justify-center transition-colors"
+                style={{
+                  border: `1px solid ${checked ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                  background: checked ? 'var(--color-accent)' : 'transparent',
+                  borderRadius: '2px',
+                }}
+              >
+                {checked && (
+                  <svg className="w-2.5 h-2.5" fill="none" stroke="#0D0D0D" viewBox="0 0 24 24" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </div>
+              <span className="text-xs font-semibold" style={{ color: checked ? 'var(--color-accent)' : 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>{label}</span>
+            </label>
+          ))}
         </div>
       </div>
     </div>
