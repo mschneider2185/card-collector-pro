@@ -21,6 +21,9 @@ export default function AuthButton() {
 
   useEffect(() => {
     setMounted(true)
+    // Safety net: never leave loading stuck — clear after 3s regardless
+    const loadingTimeout = setTimeout(() => setLoading(false), 3000)
+
     const getUser = async () => {
       try {
         // getSession reads from local cookie — fast, no network round-trip
@@ -41,6 +44,7 @@ export default function AuthButton() {
       } catch {
         // session read failed — treat as logged out
       } finally {
+        clearTimeout(loadingTimeout)
         setLoading(false)
       }
     }
@@ -69,7 +73,10 @@ export default function AuthButton() {
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      clearTimeout(loadingTimeout)
+      subscription.unsubscribe()
+    }
   }, [])
 
   // Click outside handler for dropdown
