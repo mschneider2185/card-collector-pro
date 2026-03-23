@@ -66,14 +66,17 @@ function reviewCardFromBatch(pos: BatchCardPosition, card_id: string | null): Re
 }
 
 /**
- * Crop the BACK of a binder page sheet into 9 thumbnails, column-mirrored.
- * Front position p at (row r, col c) maps to back image at (row r, col 2-c).
- * Returns array of 9 data URLs where index i = back of card at front-position i.
+ * Crop the BACK of a binder page sheet into 9 thumbnails.
+ * The flip parameter controls how positions are mapped:
+ * - 'left-right': columns mirror (most common for binder page flip)
+ * - 'top-bottom': rows mirror
+ * - 'none': no mirroring (scanner/flatbed or same orientation)
  *
- * Uses equal-thirds with small inset for back images — backs are mostly text
- * on white/gray backgrounds, so precise crop alignment matters less than for fronts.
+ * Returns array of 9 data URLs where index i = back of card at front-position i.
  */
-async function cropBackSheetIntoThumbnails(file: File): Promise<string[]> {
+type FlipDirection = 'left-right' | 'top-bottom' | 'none'
+
+async function cropBackSheetIntoThumbnails(file: File, flip: FlipDirection): Promise<string[]> {
   return new Promise(resolve => {
     const img = new window.Image()
     img.onload = () => {
@@ -89,9 +92,16 @@ async function cropBackSheetIntoThumbnails(file: File): Promise<string[]> {
       for (let row = 0; row < 3; row++) {
         for (let col = 0; col < 3; col++) {
           const frontPos = row * 3 + col
-          const backCol = 2 - col
+          // Map front position to back position based on flip direction
+          let backRow = row
+          let backCol = col
+          if (flip === 'left-right') {
+            backCol = 2 - col
+          } else if (flip === 'top-bottom') {
+            backRow = 2 - row
+          }
           const srcX = Math.round(insetX + backCol * cellW + gutter)
-          const srcY = Math.round(insetY + row * cellH + gutter)
+          const srcY = Math.round(insetY + backRow * cellH + gutter)
           const srcW = Math.round(cellW - 2 * gutter)
           const srcH = Math.round(cellH - 2 * gutter)
           const scale = Math.min(1, 900 / srcW)
@@ -138,6 +148,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
   const backFileInputRef = useRef<HTMLInputElement>(null)
   const [reScanPosition, setReScanPosition] = useState<number | null>(null)
 
+  const [backFlipDirection, setBackFlipDirection] = useState<FlipDirection>('left-right')
   const [backCropThumbnails, setBackCropThumbnails] = useState<string[]>([])
   const [backSheetPreview, setBackSheetPreview] = useState<string | null>(null)
   const [backStage, setBackStage] = useState<'idle' | 'processing' | 'done'>('idle')
@@ -191,7 +202,7 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
     setBackSheetPreview(URL.createObjectURL(file))
     setBackStage('processing')
     setBackProgress(0)
-    const backCrops = await cropBackSheetIntoThumbnails(file)
+    const backCrops = await cropBackSheetIntoThumbnails(file, backFlipDirection)
     setBackCropThumbnails(backCrops)
 
     // Snapshot review cards and front crops at call time
@@ -579,6 +590,27 @@ export default function SheetUploadMode({ user }: SheetUploadModeProps) {
                   <p className="text-white/50 text-xs mt-0.5">
                     Scan the back to capture set name, card numbers, and stats — dramatically improves accuracy.
                   </p>
+                  <div className="mt-2 space-y-2">
+                    <label className="text-white/60 text-xs">How did you flip the page?</label>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {([
+                        ['left-right', '↔ Left-Right'],
+                        ['top-bottom', '↕ Top-Bottom'],
+                        ['none', '⊘ No Flip (scanner)'],
+                      ] as [FlipDirection, string][]).map(([val, label]) => (
+                        <button key={val}
+                          onClick={() => setBackFlipDirection(val)}
+                          className="px-2.5 py-1 text-xs rounded transition-all"
+                          style={{
+                            background: backFlipDirection === val ? '#C9A84C' : 'rgba(255,255,255,0.08)',
+                            color: backFlipDirection === val ? '#0D0D0D' : 'rgba(255,255,255,0.7)',
+                            fontWeight: backFlipDirection === val ? 600 : 400
+                          }}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="flex gap-2 mt-3">
                     <button onClick={() => backFileInputRef.current?.click()}
                       className="px-4 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"

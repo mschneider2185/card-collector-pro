@@ -387,6 +387,11 @@ Recognition guidelines:
 CRITICAL — CARD NUMBER vs PLAYER JERSEY NUMBER:
 - "card_number" is the card's number in the set (from back/corners/set info), NOT the player's uniform number.
 
+CRITICAL — BRAND vs SET NAME:
+- "card_brand" is ONLY the manufacturer: "Topps", "Panini", "Upper Deck", etc.
+- "set_name" is the specific product line: "Series Two", "Chrome", "Prizm", "Contenders", "UD NHL Rookie Box Set", etc.
+- Do NOT repeat the brand in set_name. Example: brand="Topps" set_name="Series Two" (NOT "Topps Series Two")
+
 Use the back image when present for set name, manufacturer, copyright year, and card numbering.
 
 Do not include any text before or after the JSON object.`
@@ -914,6 +919,9 @@ For EACH image, extract the card's data independently. Return a JSON object:
 Rules:
 - "position" is the index label shown before the image (0–8), NOT the player's field position
 - "card_number" is the card's number IN THE SET (from back/corner), NOT the player's jersey number
+- "card_brand" is ONLY the manufacturer: "Topps", "Panini", "Upper Deck", etc. Never include the set name here
+- "set_name" is the specific product line WITHIN the brand: "Series Two", "Chrome", "Prizm", "Contenders", "UD NHL Rookie Box Set", etc. Do NOT repeat the brand in set_name. For example: brand="Topps" set_name="Series Two" (NOT "Topps Series Two")
+- If all cards appear to be from the same set, use IDENTICAL set_name and card_brand for all of them
 - Team names: full names (e.g., "New York Yankees" not "NYY")
 - Year: copyright/season year, e.g., "2023-24" → "2023"
 - Rookie: RC, ROOKIE indicators → "rookie": true
