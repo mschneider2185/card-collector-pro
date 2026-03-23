@@ -70,30 +70,36 @@ function reviewCardFromBatch(pos: BatchCardPosition, card_id: string | null): Re
  * Front position p at (row r, col c) maps to back image at (row r, col 2-c).
  * Returns array of 9 data URLs where index i = back of card at front-position i.
  *
- * Uses simple equal-thirds cropping for back images (good enough for text extraction).
+ * Uses edge detection (detectGridCells) to find the actual pocket dividers,
+ * then mirrors columns since the back is flipped left-to-right.
  */
 async function cropBackSheetIntoThumbnails(file: File): Promise<string[]> {
+  const { detectGridCells } = await import('@/lib/image-processing')
   return new Promise(resolve => {
     const img = new window.Image()
     img.onload = () => {
+      const srcCanvas = document.createElement('canvas')
+      srcCanvas.width = img.width; srcCanvas.height = img.height
+      srcCanvas.getContext('2d')!.drawImage(img, 0, 0)
+
+      const cells = detectGridCells(srcCanvas)
       const crops: string[] = new Array(9)
-      const cellW = img.width / 3
-      const cellH = img.height / 3
+
       for (let row = 0; row < 3; row++) {
         for (let col = 0; col < 3; col++) {
           const frontPos = row * 3 + col
-          const backCol = 2 - col // column mirror when page is flipped left-to-right
-          const srcX = Math.round(backCol * cellW)
-          const srcY = Math.round(row * cellH)
-          const srcW = Math.round(cellW)
-          const srcH = Math.round(cellH)
-          const scale = Math.min(1, 900 / srcW)
-          const outW = Math.round(srcW * scale)
-          const outH = Math.round(srcH * scale)
+          const backCol = 2 - col
+          const backIdx = row * 3 + backCol
+          const cell = cells[backIdx]
+
+          const scale = Math.min(1, 900 / cell.w)
           const canvas = document.createElement('canvas')
-          canvas.width = outW; canvas.height = outH
-          const ctx = canvas.getContext('2d')!
-          ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, outW, outH)
+          canvas.width = Math.round(cell.w * scale)
+          canvas.height = Math.round(cell.h * scale)
+          canvas.getContext('2d')!.drawImage(
+            srcCanvas, cell.x, cell.y, cell.w, cell.h,
+            0, 0, canvas.width, canvas.height
+          )
           crops[frontPos] = canvas.toDataURL('image/jpeg', 0.85)
         }
       }
