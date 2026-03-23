@@ -14,6 +14,14 @@ interface CardModalProps {
 }
 
 function CardModal({ card, onClose, onAddToCollection, user }: CardModalProps) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
   return (
     <div
       className="fixed inset-0 flex items-center justify-center p-4 z-50"
@@ -184,15 +192,21 @@ export default function CardsClient({ searchParams }: CardsClientProps) {
   const [cards, setCards] = useState<CardWithTradeInfo[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Keep auth state fresh — don't rely solely on a one-time mount check
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
   useEffect(() => {
     const fetchCards = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
-        const user = session?.user ?? null
-        setUser(user)
-
-        if (!user) return
-
+        // Cards are public — auth only needed for "Add to Collection"
         let query = supabase
           .from('cards')
           .select(`
@@ -272,20 +286,6 @@ export default function CardsClient({ searchParams }: CardsClientProps) {
             </div>
           </div>
         ))}
-      </div>
-    )
-  }
-
-  if (!user) {
-    return (
-      <div className="py-20 flex flex-col items-center text-center">
-        <div className="w-14 h-14 flex items-center justify-center mb-5" style={{ border: '1px solid var(--color-border)', borderRadius: '4px' }}>
-          <svg className="w-7 h-7" style={{ color: 'var(--color-text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-        </div>
-        <h2 className="text-base font-semibold mb-2" style={{ color: 'var(--color-text)' }}>Sign in to browse cards</h2>
-        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>View and add cards to your collection.</p>
       </div>
     )
   }

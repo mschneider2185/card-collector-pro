@@ -472,17 +472,32 @@ export default function CollectionClient({ userCards: initialUserCards, searchPa
   const [selectedCard, setSelectedCard] = useState<UserCard | null>(null)
   const [userCards, setUserCards] = useState<UserCard[]>(initialUserCards)
   const [user, setUser] = useState<User | null>(null)
+  const [authResolved, setAuthResolved] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  // Keep auth state fresh with a persistent listener
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      setAuthResolved(true)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+      setAuthResolved(true)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (!authResolved) return // wait for auth to resolve before fetching or showing "sign in"
+
     const fetchUserCards = async () => {
+      if (!user) {
+        setLoading(false)
+        return
+      }
+
       try {
-        const { data: { session } } = await supabase.auth.getSession()
-        const user = session?.user ?? null
-        setUser(user)
-
-        if (!user) return
-
         let query = supabase
           .from('user_cards')
           .select('*, card:cards(*)')
@@ -509,7 +524,7 @@ export default function CollectionClient({ userCards: initialUserCards, searchPa
     }
 
     fetchUserCards()
-  }, [searchParams.q, searchParams.sport, searchParams.year, searchParams.trade])
+  }, [authResolved, user, searchParams.q, searchParams.sport, searchParams.year, searchParams.trade])
 
   const handleDeleteCard = async (userCardId: string) => {
     const { error } = await supabase.from('user_cards').delete().eq('id', userCardId)
