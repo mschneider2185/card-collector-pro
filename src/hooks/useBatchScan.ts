@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { validateQuad } from '@/lib/llm-extraction'
-import { sheetImageToCanvas, warpCardToRect, resizeCanvasToDataUrl, detectGridCells } from '@/lib/image-processing'
+import { sheetImageToCanvas, warpCardToRect, resizeCanvasToDataUrl } from '@/lib/image-processing'
 import type { DetectionResult, SheetExtractionResult, BatchCardPosition, ProcessedBatchCard } from '@/types'
 
 export interface BatchScanState {
@@ -185,29 +185,87 @@ export function useBatchScan(userId: string) {
         }
       }
 
-      // ── FALLBACK: if fewer than 5 quads validated, use client-side edge
-      //    detection to find the actual pocket dividers in the image.
-      //    detectGridCells scans the luminance profile for dark bands between
-      //    pockets, producing accurate crop rectangles regardless of binder
-      //    brand, camera angle, or framing.
+      // ── FALLBACK: if fewer than 5 quads validated, use border-aware
+      //    equal-thirds cropping. Standard 9-pocket pages have equal-sized
+      //    pockets — the problem was never the proportions, it was finding
+      //    the outer border of the binder page.
+      //
+      //    Strategy: detect the outer binder border by scanning inward from
+      //    each edge until we hit card content (bright pixels), then divide
+      //    the inner rectangle into equal thirds.
       if (quadSuccessCount < 5) {
-        console.warn(`[batchScan] Only ${quadSuccessCount}/9 quads valid — falling back to edge detection`)
-        const cells = detectGridCells(fullResCanvas)
+        console.warn(`[batchScan] Only ${quadSuccessCount}/9 quads valid — falling back to border-aware equal thirds`)
+
+        // Detect outer border by scanning for the content rectangle
+        const borderCtx = fullResCanvas.getContext('2d')!
+        const borderData = borderCtx.getImageData(0, 0, imgW, imgH)
+        const bpx = borderData.data
+
+        // Find where card content starts from each edge
+        // Cards are colorful (high variance/saturation) vs white/gray binder border
+        function scanForContent(
+          axis: 'x' | 'y',
+          from: number,
+          to: number,
+          step: number
+        ): number {
+          const threshold = 180 // luminance below this = likely card content, not white border
+          const sampleCount = 20
+          for (let pos = from; pos !== to; pos += step) {
+            let darkCount = 0
+            for (let s = 0; s < sampleCount; s++) {
+              let px: number, py: number
+              if (axis === 'x') {
+                px = pos
+                py = Math.round((s + 0.5) * imgH / sampleCount)
+              } else {
+                px = Math.round((s + 0.5) * imgW / sampleCount)
+                py = pos
+              }
+              const idx = (py * imgW + px) * 4
+              const lum = bpx[idx] * 0.299 + bpx[idx+1] * 0.587 + bpx[idx+2] * 0.114
+              if (lum < threshold) darkCount++
+            }
+            // If >40% of sample points are dark, we've hit card content
+            if (darkCount > sampleCount * 0.4) return pos
+          }
+          return from // couldn't find border, use original edge
+        }
+
+        const contentLeft   = scanForContent('x', 0, Math.round(imgW * 0.15), 1)
+        const contentRight  = scanForContent('x', imgW - 1, Math.round(imgW * 0.85), -1)
+        const contentTop    = scanForContent('y', 0, Math.round(imgH * 0.15), 1)
+        const contentBottom = scanForContent('y', imgH - 1, Math.round(imgH * 0.85), -1)
+
+        const innerW = contentRight - contentLeft
+        const innerH = contentBottom - contentTop
+
+        console.log(`[batchScan] Content rect: (${contentLeft},${contentTop}) → (${contentRight},${contentBottom}) = ${innerW}×${innerH}`)
+
+        // Divide inner rectangle into equal thirds with small gutter inset
+        const gutterW = Math.round(innerW * 0.008) // ~0.8% gutter between cells
+        const gutterH = Math.round(innerH * 0.008)
+        const cellW = Math.round(innerW / 3)
+        const cellH = Math.round(innerH / 3)
 
         flaggedPositions.length = 0
-        for (let idx = 0; idx < 9; idx++) {
-          const cell = cells[idx]
-          if (!cell || cell.w < 10 || cell.h < 10) {
-            flaggedPositions.push(idx)
-            continue
+        for (let row = 0; row < 3; row++) {
+          for (let col = 0; col < 3; col++) {
+            const idx = row * 3 + col
+            // Each cell starts at content edge + col*cellW, with gutter inset
+            const x = contentLeft + col * cellW + (col > 0 ? gutterW : 0)
+            const y = contentTop  + row * cellH + (row > 0 ? gutterH : 0)
+            const w = cellW - (col < 2 ? gutterW : 0)
+            const h = cellH - (row < 2 ? gutterH : 0)
+
+            const cropCanvas = document.createElement('canvas')
+            const outScale = Math.min(1, 900 / w)
+            cropCanvas.width = Math.round(w * outScale)
+            cropCanvas.height = Math.round(h * outScale)
+            const ctx = cropCanvas.getContext('2d')!
+            ctx.drawImage(fullResCanvas, x, y, w, h, 0, 0, cropCanvas.width, cropCanvas.height)
+            croppedImages[idx] = cropCanvas.toDataURL('image/jpeg', 0.85)
           }
-          const cropCanvas = document.createElement('canvas')
-          const outScale = Math.min(1, 900 / cell.w)
-          cropCanvas.width = Math.round(cell.w * outScale)
-          cropCanvas.height = Math.round(cell.h * outScale)
-          const ctx = cropCanvas.getContext('2d')!
-          ctx.drawImage(fullResCanvas, cell.x, cell.y, cell.w, cell.h, 0, 0, cropCanvas.width, cropCanvas.height)
-          croppedImages[idx] = cropCanvas.toDataURL('image/jpeg', 0.85)
         }
       }
 
