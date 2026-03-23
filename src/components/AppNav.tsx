@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import AuthButton from '@/components/AuthButton'
 
 const navItems = [
   {
@@ -117,9 +118,9 @@ export default function AppNav() {
           })}
         </nav>
 
-        {/* Bottom divider */}
-        <div className="px-5 py-4 text-xs" style={{ color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border)' }}>
-          Phase 2 — Collection Experience
+        {/* Auth */}
+        <div className="px-4 py-4" style={{ borderTop: '1px solid var(--color-border)' }}>
+          <AuthButton />
         </div>
       </aside>
 
@@ -150,6 +151,9 @@ export default function AppNav() {
             </Link>
           )
         })}
+        <div className="flex-1 flex flex-col items-center justify-center py-2">
+          <AuthButton />
+        </div>
       </nav>
     </>
   )

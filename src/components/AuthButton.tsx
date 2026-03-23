@@ -22,23 +22,27 @@ export default function AuthButton() {
   useEffect(() => {
     setMounted(true)
     const getUser = async () => {
-      // getSession reads from local cookie — fast, no network round-trip
-      const { data: { session } } = await supabase.auth.getSession()
-      const user = session?.user ?? null
-      setUser(user)
-      
-      // If user is authenticated, fetch their profile
-      if (user) {
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-        
-        setUserProfile(profile)
+      try {
+        // getSession reads from local cookie — fast, no network round-trip
+        const { data: { session } } = await supabase.auth.getSession()
+        const user = session?.user ?? null
+        setUser(user)
+
+        // If user is authenticated, fetch their profile
+        if (user) {
+          const { data: profile } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', user.id)
+            .single()
+
+          setUserProfile(profile)
+        }
+      } catch {
+        // session read failed — treat as logged out
+      } finally {
+        setLoading(false)
       }
-      
-      setLoading(false)
     }
 
     getUser()
@@ -187,7 +191,7 @@ export default function AuthButton() {
 
   if (loading) {
     return (
-      <div className="h-8 w-20 animate-pulse" style={{ background: 'var(--color-border)', borderRadius: '2px' }}></div>
+      <div className="h-8 w-20 animate-pulse" style={{ background: 'var(--color-accent)', opacity: 0.25, borderRadius: '2px' }}></div>
     )
   }
 
