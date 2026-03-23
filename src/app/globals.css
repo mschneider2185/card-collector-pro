@@ -95,6 +95,7 @@ body {
 /* ─── Card Image Treatment ───────────────────────────────────────────────── */
 /* Natural aspect ratio, no filters, subtle edge border on dark */
 .card-image-wrapper {
+  position: relative;
   border-radius: 2px;
   overflow: hidden;
 }
