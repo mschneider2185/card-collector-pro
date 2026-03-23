@@ -475,30 +475,35 @@ export default function CollectionClient({ userCards: initialUserCards, searchPa
 
   useEffect(() => {
     const fetchUserCards = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        setUser(user)
 
-      if (!user) { setLoading(false); return }
+        if (!user) return
 
-      let query = supabase
-        .from('user_cards')
-        .select('*, card:cards(*)')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
+        let query = supabase
+          .from('user_cards')
+          .select('*, card:cards(*)')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
 
-      if (searchParams.q)
-        query = query.or(`card.player_name.ilike.%${searchParams.q}%,card.brand.ilike.%${searchParams.q}%,card.series.ilike.%${searchParams.q}%`)
-      if (searchParams.sport)
-        query = query.eq('card.sport', searchParams.sport)
-      if (searchParams.year)
-        query = query.eq('card.year', parseInt(searchParams.year))
-      if (searchParams.trade === 'true')
-        query = query.eq('is_for_trade', true)
+        if (searchParams.q)
+          query = query.or(`card.player_name.ilike.%${searchParams.q}%,card.brand.ilike.%${searchParams.q}%,card.series.ilike.%${searchParams.q}%`)
+        if (searchParams.sport)
+          query = query.eq('card.sport', searchParams.sport)
+        if (searchParams.year)
+          query = query.eq('card.year', parseInt(searchParams.year))
+        if (searchParams.trade === 'true')
+          query = query.eq('is_for_trade', true)
 
-      const { data, error } = await query
-      if (error) { console.error('Error fetching user cards:', error) }
-      else { setUserCards(data || []) }
-      setLoading(false)
+        const { data, error } = await query
+        if (error) { console.error('Error fetching user cards:', error) }
+        else { setUserCards(data || []) }
+      } catch (err) {
+        console.error('Error in fetchUserCards:', err)
+      } finally {
+        setLoading(false)
+      }
     }
 
     fetchUserCards()

@@ -186,42 +186,43 @@ export default function CardsClient({ searchParams }: CardsClientProps) {
 
   useEffect(() => {
     const fetchCards = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        setUser(user)
 
-      if (!user) {
+        if (!user) return
+
+        let query = supabase
+          .from('cards')
+          .select(`
+            *,
+            user_cards(
+              id,
+              user_id,
+              is_for_trade,
+              quantity
+            )
+          `)
+          .order('created_at', { ascending: false })
+          .limit(100)
+
+        if (searchParams.q) {
+          query = query.or(`player_name.ilike.%${searchParams.q}%,brand.ilike.%${searchParams.q}%,series.ilike.%${searchParams.q}%`)
+        }
+        if (searchParams.sport) query = query.eq('sport', searchParams.sport)
+        if (searchParams.year) query = query.eq('year', parseInt(searchParams.year))
+        if (searchParams.rookie === 'true') query = query.eq('rookie', true)
+        if (searchParams.auto === 'true') query = query.eq('autographed', true)
+        if (searchParams.patch === 'true') query = query.eq('patch', true)
+
+        const { data, error } = await query
+        if (error) console.error('Error fetching cards:', error)
+        else setCards(data || [])
+      } catch (err) {
+        console.error('Error in fetchCards:', err)
+      } finally {
         setLoading(false)
-        return
       }
-
-      let query = supabase
-        .from('cards')
-        .select(`
-          *,
-          user_cards(
-            id,
-            user_id,
-            is_for_trade,
-            quantity
-          )
-        `)
-        .order('created_at', { ascending: false })
-        .limit(100)
-
-      if (searchParams.q) {
-        query = query.or(`player_name.ilike.%${searchParams.q}%,brand.ilike.%${searchParams.q}%,series.ilike.%${searchParams.q}%`)
-      }
-      if (searchParams.sport) query = query.eq('sport', searchParams.sport)
-      if (searchParams.year) query = query.eq('year', parseInt(searchParams.year))
-      if (searchParams.rookie === 'true') query = query.eq('rookie', true)
-      if (searchParams.auto === 'true') query = query.eq('autographed', true)
-      if (searchParams.patch === 'true') query = query.eq('patch', true)
-
-      const { data, error } = await query
-      if (error) console.error('Error fetching cards:', error)
-      else setCards(data || [])
-
-      setLoading(false)
     }
 
     fetchCards()
