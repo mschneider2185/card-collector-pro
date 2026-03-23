@@ -70,34 +70,36 @@ function reviewCardFromBatch(pos: BatchCardPosition, card_id: string | null): Re
  * Front position p at (row r, col c) maps to back image at (row r, col 2-c).
  * Returns array of 9 data URLs where index i = back of card at front-position i.
  *
- * Uses edge detection (detectGridCells) to find the actual pocket dividers,
- * then mirrors columns since the back is flipped left-to-right.
+ * Uses equal-thirds with small inset for back images — backs are mostly text
+ * on white/gray backgrounds, so precise crop alignment matters less than for fronts.
  */
 async function cropBackSheetIntoThumbnails(file: File): Promise<string[]> {
-  const { detectGridCells } = await import('@/lib/image-processing')
   return new Promise(resolve => {
     const img = new window.Image()
     img.onload = () => {
-      const srcCanvas = document.createElement('canvas')
-      srcCanvas.width = img.width; srcCanvas.height = img.height
-      srcCanvas.getContext('2d')!.drawImage(img, 0, 0)
-
-      const cells = detectGridCells(srcCanvas)
       const crops: string[] = new Array(9)
+      const insetX = Math.round(img.width * 0.02)
+      const insetY = Math.round(img.height * 0.02)
+      const innerW = img.width - 2 * insetX
+      const innerH = img.height - 2 * insetY
+      const cellW = innerW / 3
+      const cellH = innerH / 3
+      const gutter = Math.round(img.width * 0.005)
 
       for (let row = 0; row < 3; row++) {
         for (let col = 0; col < 3; col++) {
           const frontPos = row * 3 + col
           const backCol = 2 - col
-          const backIdx = row * 3 + backCol
-          const cell = cells[backIdx]
-
-          const scale = Math.min(1, 900 / cell.w)
+          const srcX = Math.round(insetX + backCol * cellW + gutter)
+          const srcY = Math.round(insetY + row * cellH + gutter)
+          const srcW = Math.round(cellW - 2 * gutter)
+          const srcH = Math.round(cellH - 2 * gutter)
+          const scale = Math.min(1, 900 / srcW)
           const canvas = document.createElement('canvas')
-          canvas.width = Math.round(cell.w * scale)
-          canvas.height = Math.round(cell.h * scale)
+          canvas.width = Math.round(srcW * scale)
+          canvas.height = Math.round(srcH * scale)
           canvas.getContext('2d')!.drawImage(
-            srcCanvas, cell.x, cell.y, cell.w, cell.h,
+            img, srcX, srcY, srcW, srcH,
             0, 0, canvas.width, canvas.height
           )
           crops[frontPos] = canvas.toDataURL('image/jpeg', 0.85)
