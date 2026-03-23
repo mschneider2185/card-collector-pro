@@ -7,6 +7,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import CameraCapture from '@/components/CameraCapture'
 import SheetUploadMode from './SheetUploadMode'
+import AuthButton from '@/components/AuthButton'
 
 import type { CardExtractionResult } from '@/types'
 
@@ -72,12 +73,16 @@ export default function UploadPage() {
   })
 
   useEffect(() => {
-    const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      setUser(session?.user ?? null)
     }
+    checkSession()
 
-    getUser()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+    return () => subscription.unsubscribe()
   }, [])
 
   useEffect(() => {
@@ -458,14 +463,18 @@ export default function UploadPage() {
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
-        <div className="text-center p-8" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
+        <div className="text-center p-8 max-w-sm w-full" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
           <div className="w-12 h-12 flex items-center justify-center mx-auto mb-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '4px' }}>
             <svg className="w-6 h-6" style={{ color: 'var(--color-accent)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--color-text)' }}>Sign in to upload cards</h2>
-          <Link href="/" className="text-sm font-medium transition-colors" style={{ color: 'var(--color-accent)' }}>
+          <h2 className="text-lg font-semibold mb-2" style={{ color: 'var(--color-text)' }}>Sign in to upload cards</h2>
+          <p className="text-sm mb-6" style={{ color: 'var(--color-text-muted)' }}>Create an account or sign in to start building your collection.</p>
+          <div className="flex justify-center mb-4">
+            <AuthButton />
+          </div>
+          <Link href="/" className="text-xs font-medium transition-colors" style={{ color: 'var(--color-text-muted)' }}>
             Back to home
           </Link>
         </div>

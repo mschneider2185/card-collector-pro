@@ -50,7 +50,8 @@ function CardModal({ userCard, onClose, onDelete, onUpdate }: CardModalProps) {
   const handleSave = async () => {
     setSaving(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user ?? null
       if (!user) throw new Error('Not authenticated')
 
       const response = await fetch(`/api/user-cards/${userCard.id}`, {
@@ -476,7 +477,8 @@ export default function CollectionClient({ userCards: initialUserCards, searchPa
   useEffect(() => {
     const fetchUserCards = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { session } } = await supabase.auth.getSession()
+        const user = session?.user ?? null
         setUser(user)
 
         if (!user) return
