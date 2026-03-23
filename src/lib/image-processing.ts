@@ -352,6 +352,173 @@ function computeHomographyGeneral(
 /**
  * Resize a canvas and return a JPEG data URL.
  */
+/**
+ * Detect the 3×3 grid of card pockets in a binder page image using
+ * luminance-band analysis.
+ *
+ * How it works:
+ * 1. Convert the image to grayscale luminance.
+ * 2. Project luminance onto the X axis (column averages) and Y axis (row averages).
+ * 3. Find the two deepest valleys (darkest bands) in each projection —
+ *    these correspond to the dark gaps / dividers between the three columns
+ *    and three rows of pockets.
+ * 4. Use those valleys as the split lines to define 9 cell rectangles.
+ *
+ * Falls back to equal-thirds if fewer than 2 valleys are found in either axis.
+ *
+ * Returns an array of 9 rects: { x, y, w, h } in pixel coordinates,
+ * indexed row-major (0=top-left, 8=bottom-right).
+ */
+export interface CellRect { x: number; y: number; w: number; h: number }
+
+export function detectGridCells(canvas: HTMLCanvasElement): CellRect[] {
+  const W = canvas.width
+  const H = canvas.height
+  const ctx = canvas.getContext('2d')!
+  const imgData = ctx.getImageData(0, 0, W, H)
+  const px = imgData.data // RGBA flat array
+
+  // ── 1. Compute column-average and row-average luminance ──
+  // We sample the middle 80% to ignore outer border noise
+  const xStart = Math.round(W * 0.05)
+  const xEnd   = Math.round(W * 0.95)
+  const yStart = Math.round(H * 0.05)
+  const yEnd   = Math.round(H * 0.95)
+
+  // Column profile (avg luminance per x)
+  const colProfile = new Float32Array(W)
+  for (let x = xStart; x < xEnd; x++) {
+    let sum = 0; let count = 0
+    for (let y = yStart; y < yEnd; y += 2) { // stride 2 for speed
+      const idx = (y * W + x) * 4
+      sum += px[idx] * 0.299 + px[idx+1] * 0.587 + px[idx+2] * 0.114
+      count++
+    }
+    colProfile[x] = count > 0 ? sum / count : 255
+  }
+
+  // Row profile (avg luminance per y)
+  const rowProfile = new Float32Array(H)
+  for (let y = yStart; y < yEnd; y++) {
+    let sum = 0; let count = 0
+    for (let x = xStart; x < xEnd; x += 2) {
+      const idx = (y * W + x) * 4
+      sum += px[idx] * 0.299 + px[idx+1] * 0.587 + px[idx+2] * 0.114
+      count++
+    }
+    rowProfile[y] = count > 0 ? sum / count : 255
+  }
+
+  // ── 2. Smooth the profiles (moving average, radius ~1% of dimension) ──
+  function smooth(arr: Float32Array, radius: number): Float32Array {
+    const out = new Float32Array(arr.length)
+    for (let i = 0; i < arr.length; i++) {
+      let s = 0; let c = 0
+      for (let j = Math.max(0, i - radius); j <= Math.min(arr.length - 1, i + radius); j++) {
+        s += arr[j]; c++
+      }
+      out[i] = c > 0 ? s / c : arr[i]
+    }
+    return out
+  }
+
+  const smColProfile = smooth(colProfile, Math.max(3, Math.round(W * 0.01)))
+  const smRowProfile = smooth(rowProfile, Math.max(3, Math.round(H * 0.01)))
+
+  // ── 3. Find the 2 deepest valleys in the middle 70% of each profile ──
+  //    (valleys = darkest bands = dividers between pockets)
+  function findTwoValleys(profile: Float32Array, len: number): [number, number] | null {
+    // Search range: 20%–80% of the dimension (dividers are never at the edges)
+    const lo = Math.round(len * 0.20)
+    const hi = Math.round(len * 0.80)
+
+    // Find all local minima
+    const minima: { pos: number; val: number }[] = []
+    for (let i = lo + 1; i < hi - 1; i++) {
+      if (profile[i] <= profile[i - 1] && profile[i] <= profile[i + 1]) {
+        minima.push({ pos: i, val: profile[i] })
+      }
+    }
+
+    if (minima.length < 2) return null
+
+    // Sort by luminance (darkest first)
+    minima.sort((a, b) => a.val - b.val)
+
+    // Pick the two deepest that are sufficiently separated (>15% of dimension apart)
+    const minSep = len * 0.15
+    const v1 = minima[0]
+    for (let k = 1; k < minima.length; k++) {
+      if (Math.abs(minima[k].pos - v1.pos) >= minSep) {
+        const pair: [number, number] = [v1.pos, minima[k].pos]
+        pair.sort((a, b) => a - b)
+        return pair
+      }
+    }
+    return null
+  }
+
+  const colValleys = findTwoValleys(smColProfile, W)
+  const rowValleys = findTwoValleys(smRowProfile, H)
+
+  // ── 4. Build the 3 column boundaries and 3 row boundaries ──
+  let colBounds: [number, number, number, number]
+  if (colValleys) {
+    // Add small inset (1% of cell width) to trim the divider itself
+    const inset = Math.round(W * 0.008)
+    colBounds = [
+      Math.max(0, xStart),
+      colValleys[0] + inset,
+      colValleys[1] + inset,
+      Math.min(W, xEnd)
+    ]
+    // Adjust: col0 ends at valley0-inset, col1 starts at valley0+inset, etc.
+    console.log(`[gridDetect] Vertical dividers at x=${colValleys[0]}, x=${colValleys[1]} (W=${W})`)
+  } else {
+    console.warn('[gridDetect] Could not find 2 vertical dividers — using equal thirds')
+    colBounds = [
+      Math.round(W * 0.02),
+      Math.round(W * 0.333),
+      Math.round(W * 0.667),
+      Math.round(W * 0.98)
+    ]
+  }
+
+  let rowBounds: [number, number, number, number]
+  if (rowValleys) {
+    const inset = Math.round(H * 0.008)
+    rowBounds = [
+      Math.max(0, yStart),
+      rowValleys[0] + inset,
+      rowValleys[1] + inset,
+      Math.min(H, yEnd)
+    ]
+    console.log(`[gridDetect] Horizontal dividers at y=${rowValleys[0]}, y=${rowValleys[1]} (H=${H})`)
+  } else {
+    console.warn('[gridDetect] Could not find 2 horizontal dividers — using equal thirds')
+    rowBounds = [
+      Math.round(H * 0.02),
+      Math.round(H * 0.333),
+      Math.round(H * 0.667),
+      Math.round(H * 0.98)
+    ]
+  }
+
+  // ── 5. Build 9 cell rects ──
+  const cells: CellRect[] = []
+  for (let row = 0; row < 3; row++) {
+    const y0 = rowBounds[row]
+    const y1 = row < 2 ? rowBounds[row + 1] - Math.round(H * 0.008) : rowBounds[row + 1]
+    for (let col = 0; col < 3; col++) {
+      const x0 = colBounds[col]
+      const x1 = col < 2 ? colBounds[col + 1] - Math.round(W * 0.008) : colBounds[col + 1]
+      cells.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 })
+    }
+  }
+
+  return cells
+}
+
 export function resizeCanvasToDataUrl(
   canvas: HTMLCanvasElement,
   maxWidth: number = 900,

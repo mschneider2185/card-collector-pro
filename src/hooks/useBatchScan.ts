@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { validateQuad } from '@/lib/llm-extraction'
-import { sheetImageToCanvas, warpCardToRect, resizeCanvasToDataUrl } from '@/lib/image-processing'
+import { sheetImageToCanvas, warpCardToRect, resizeCanvasToDataUrl, detectGridCells } from '@/lib/image-processing'
 import type { DetectionResult, SheetExtractionResult, BatchCardPosition, ProcessedBatchCard } from '@/types'
 
 export interface BatchScanState {
@@ -185,39 +185,29 @@ export function useBatchScan(userId: string) {
         }
       }
 
-      // ── FALLBACK: if fewer than 5 quads validated, use known binder page
-      //    geometry (POCKET_GRID) to crop instead — reliable for standard pages
+      // ── FALLBACK: if fewer than 5 quads validated, use client-side edge
+      //    detection to find the actual pocket dividers in the image.
+      //    detectGridCells scans the luminance profile for dark bands between
+      //    pockets, producing accurate crop rectangles regardless of binder
+      //    brand, camera angle, or framing.
       if (quadSuccessCount < 5) {
-        console.warn(`[batchScan] Only ${quadSuccessCount}/9 quads valid — falling back to POCKET_GRID`)
-        const POCKET_GRID = {
-          cols: [
-            { start: 0.020, end: 0.320 },
-            { start: 0.340, end: 0.660 },
-            { start: 0.680, end: 0.980 },
-          ],
-          rows: [
-            { start: 0.015, end: 0.325 },
-            { start: 0.340, end: 0.660 },
-            { start: 0.675, end: 0.990 },
-          ],
-        }
+        console.warn(`[batchScan] Only ${quadSuccessCount}/9 quads valid — falling back to edge detection`)
+        const cells = detectGridCells(fullResCanvas)
 
         flaggedPositions.length = 0
-        for (let row = 0; row < 3; row++) {
-          for (let col = 0; col < 3; col++) {
-            const idx = row * 3 + col
-            const srcX = Math.round(imgW * POCKET_GRID.cols[col].start)
-            const srcY = Math.round(imgH * POCKET_GRID.rows[row].start)
-            const srcW = Math.round(imgW * (POCKET_GRID.cols[col].end - POCKET_GRID.cols[col].start))
-            const srcH = Math.round(imgH * (POCKET_GRID.rows[row].end - POCKET_GRID.rows[row].start))
-            const cropCanvas = document.createElement('canvas')
-            const outScale = Math.min(1, 900 / srcW)
-            cropCanvas.width = Math.round(srcW * outScale)
-            cropCanvas.height = Math.round(srcH * outScale)
-            const ctx = cropCanvas.getContext('2d')!
-            ctx.drawImage(fullResCanvas, srcX, srcY, srcW, srcH, 0, 0, cropCanvas.width, cropCanvas.height)
-            croppedImages[idx] = cropCanvas.toDataURL('image/jpeg', 0.85)
+        for (let idx = 0; idx < 9; idx++) {
+          const cell = cells[idx]
+          if (!cell || cell.w < 10 || cell.h < 10) {
+            flaggedPositions.push(idx)
+            continue
           }
+          const cropCanvas = document.createElement('canvas')
+          const outScale = Math.min(1, 900 / cell.w)
+          cropCanvas.width = Math.round(cell.w * outScale)
+          cropCanvas.height = Math.round(cell.h * outScale)
+          const ctx = cropCanvas.getContext('2d')!
+          ctx.drawImage(fullResCanvas, cell.x, cell.y, cell.w, cell.h, 0, 0, cropCanvas.width, cropCanvas.height)
+          croppedImages[idx] = cropCanvas.toDataURL('image/jpeg', 0.85)
         }
       }
 
