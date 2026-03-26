@@ -7,6 +7,8 @@ Live at: **card-collector-pro.vercel.app**
 ## Features
 
 - **AI Card Recognition**: GPT-4o Vision extracts all card details from front and back images via live SSE streaming
+- **Set Completion Tracker**: Search for any trading card set, view the full checklist, and track your progress (powered by Firecrawl + TCDB)
+- **Auto Set Matching**: Uploaded cards are automatically matched to set checklists with fuzzy matching (pg_trgm)
 - **Mobile Camera Integration**: Native camera access with card frame guides for optimal capture
 - **Collection Management**: Full CRUD with inline editing, condition tracking, trade status, and notes
 - **Card Database**: Search and browse the master card database with advanced filtering
@@ -17,7 +19,7 @@ Live at: **card-collector-pro.vercel.app**
 
 - **Frontend**: Next.js 15 App Router, React 19, TypeScript, Tailwind CSS
 - **Backend**: Supabase (Auth, PostgreSQL, Storage) with Row-Level Security
-- **AI**: OpenAI GPT-4o Vision — no Google Vision, no separate OCR step
+- **AI/ML**: OpenAI GPT-4o Vision (card recognition), Firecrawl (set checklist scraping)
 - **Deployment**: Vercel Hobby (Edge Runtime for long-running AI calls)
 
 ## Getting Started
@@ -40,6 +42,7 @@ NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 OPENAI_API_KEY=your_openai_api_key
+FIRECRAWL_API_KEY=your_firecrawl_api_key
 ```
 
 Get your Supabase credentials from: **Supabase Dashboard → Settings → API**
@@ -50,7 +53,7 @@ Get your Supabase credentials from: **Supabase Dashboard → Settings → API**
 
 Run `database_setup.sql` in your **Supabase SQL Editor**. This creates all tables, triggers, RLS policies, and indexes.
 
-Tables: `users`, `cards`, `user_cards`, `card_uploads`
+Tables: `users`, `cards`, `user_cards`, `card_uploads`, `card_sets`, `set_checklist`
 
 ### 4. Create storage buckets
 
@@ -87,6 +90,7 @@ src/
 │   ├── auth/                 # Auth pages + OAuth callback
 │   ├── cards/                # Card database browsing
 │   ├── collection/           # User collection management
+│   ├── sets/                 # Set completion tracker + detail views
 │   └── upload/               # Card upload + AI processing UI
 ├── components/               # Reusable React components
 ├── lib/                      # Supabase client, GPT-4o extraction
