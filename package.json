@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@mendable/firecrawl-js": "^4.18.0",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.53.0",
     "@vercel/functions": "^3.4.3",
