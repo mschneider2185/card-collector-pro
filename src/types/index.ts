@@ -56,6 +56,7 @@ export interface UserCard {
   card_id: string
   card?: Card
   checklist_id?: string | null
+  match_rejected?: boolean
   quantity: number
   condition: string | null
   is_for_trade: boolean
