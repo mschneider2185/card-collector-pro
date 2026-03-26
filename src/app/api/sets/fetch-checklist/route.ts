@@ -16,20 +16,20 @@ interface ParsedCard {
   is_rookie: boolean
 }
 
-/** Returns true if a string looks like garbage (markdown images, base64, URLs, nav). */
-function isGarbage(text: string): boolean {
+/** Returns true if cleaned text looks like nav/junk rather than card data. */
+function isJunkText(text: string): boolean {
   if (!text) return true
-  // Markdown image/link syntax
-  if (text.includes('![') || text.includes('](')) return true
-  // Base64 data
-  if (text.includes('Base64') || text.includes('data:image')) return true
-  // URL-heavy content
-  if (text.includes('https://') || text.includes('http://')) return true
-  // HTML tags
-  if (/<[a-z][\s\S]*>/i.test(text)) return true
-  // Navigation / UI text
-  if (/^(options|checklist|set links|printable|view|gallery|sort)/i.test(text)) return true
+  if (/^(options|checklist|set links|printable|view|gallery|sort|cards|image|thumbnail)$/i.test(text)) return true
+  // Still contains unresolved markdown image syntax
+  if (text.includes('![')) return true
+  // Mostly URL
+  if (/^https?:\/\//i.test(text)) return true
   return false
+}
+
+/** Strip markdown image syntax: ![alt](src) → "" */
+function stripImages(text: string): string {
+  return text.replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim()
 }
 
 /** Strip markdown link syntax: [text](url) → text */
@@ -37,17 +37,25 @@ function stripLinks(text: string): string {
   return text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').trim()
 }
 
+/** Full cleanup: strip images first, then links, then stray artifacts */
+function cleanCell(text: string): string {
+  let clean = stripImages(text)
+  clean = stripLinks(clean)
+  clean = clean.replace(/<[^>]*>/g, '')  // Remove HTML tags
+  clean = clean.replace(/[[\]()]/g, '')   // Remove stray brackets
+  clean = clean.trim()
+  return clean
+}
+
 /**
  * Parse card rows from a TCDB markdown page.
  *
- * TCDB checklist pages render as markdown tables with columns like:
- *   | # | Name | Team | Pos | ... |
+ * TCDB pages come in various markdown formats:
+ * - Tables: | # | Name | Team | ... | (with possible image cells)
+ * - Link lists: [1](url) [Player Name](url) [Team](url)
+ * - Plain text: 1 Player Name Team
  *
- * We also handle non-table list formats like:
- *   1 Player Name Team
- *
- * Filters out markdown image/link syntax, base64 data, and nav content
- * that would otherwise be mis-parsed as card data.
+ * Images (base64 thumbnails) and navigation content are stripped before parsing.
  */
 function parseChecklistFromMarkdown(markdown: string): ParsedCard[] {
   const cards: ParsedCard[] = []
@@ -57,40 +65,34 @@ function parseChecklistFromMarkdown(markdown: string): ParsedCard[] {
   // Strategy 1: Parse markdown table rows
   for (const line of lines) {
     if (!line.startsWith('|')) continue
-    // Skip header separator rows like |---|---|
     if (/^\|[\s-:|]+\|$/.test(line)) continue
-    // Skip lines with markdown images (base64 thumbnails from TCDB)
-    if (line.includes('![') || line.includes('Base64') || line.includes('data:image')) continue
 
-    const cells = line.split('|').map(c => stripLinks(c).trim()).filter(c => c.length > 0)
+    // Clean each cell: strip images, then links, then stray artifacts
+    const cells = line.split('|').map(c => cleanCell(c)).filter(c => c.length > 0)
     if (cells.length < 2) continue
 
-    // First cell should be a card number (numeric, or alphanumeric like "RC-1", "1a")
     const cardNum = cells[0].replace(/^#/, '').trim()
     if (!cardNum) continue
-    // Must start with a digit or be a known card number pattern
     if (!/^\d/.test(cardNum) && !/^[A-Z]{1,4}-?\d/i.test(cardNum)) continue
-    // Skip header rows
     if (/^(number|card|no\.?|num|#)$/i.test(cardNum)) continue
 
     const playerName = cells[1] || null
-    if (!playerName || isGarbage(playerName)) continue
-    // Skip header rows
-    if (/^(name|player|description|image)$/i.test(playerName)) continue
+    if (!playerName || isJunkText(playerName)) continue
+    if (/^(name|player|description)$/i.test(playerName)) continue
 
     const key = `${cardNum}|${playerName}`
     if (seen.has(key)) continue
     seen.add(key)
 
-    const team = cells.length > 2 ? cells[2] : null
-    const position = cells.length > 3 ? cells[3] : null
+    const team = cells.length > 2 && !isJunkText(cells[2]) ? cells[2] : null
+    const position = cells.length > 3 && !isJunkText(cells[3]) ? cells[3] : null
     const fullLine = line.toLowerCase()
 
     cards.push({
       card_number: cardNum,
       player_name: playerName,
-      team: team && !isGarbage(team) && !/^(team|club)$/i.test(team) ? team : null,
-      position: position && !isGarbage(position) && !/^(pos|position)$/i.test(position) ? position : null,
+      team: team && !/^(team|club)$/i.test(team) ? team : null,
+      position: position && !/^(pos|position)$/i.test(position) ? position : null,
       variation: null,
       is_short_print: fullLine.includes(' sp') || fullLine.includes('short print'),
       is_rookie: fullLine.includes(' rc') || fullLine.includes('rookie'),
@@ -99,28 +101,23 @@ function parseChecklistFromMarkdown(markdown: string): ParsedCard[] {
 
   if (cards.length > 0) return cards
 
-  // Strategy 2: Parse non-table formats — look for lines with card numbers and names
-  // TCDB often renders as: [number](link) Player Name · Team
-  // Or plain: 123 Player Name Team
+  // Strategy 2: Parse any line after full markdown cleanup
+  // Handles: [1](url) [Player](url) [Team](url) and plain "1 Player Team"
   for (const line of lines) {
-    const stripped = stripLinks(line.trim())
+    const stripped = cleanCell(line)
     if (!stripped) continue
-    // Skip lines that are mostly markdown image/link junk
-    if (isGarbage(stripped)) continue
 
-    // Try pattern: number followed by player name
     const match = stripped.match(/^#?(\d+[a-zA-Z]?)\s+(.+)/)
     if (!match) continue
 
     const cardNum = match[1]
     const rest = match[2].trim()
-    if (!rest || isGarbage(rest)) continue
+    if (!rest || isJunkText(rest)) continue
 
     const key = `${cardNum}|${rest}`
     if (seen.has(key)) continue
     seen.add(key)
 
-    // Split on double-space, tab, or · (middle dot)
     const parts = rest.split(/\s{2,}|\t|·/).map(p => p.trim()).filter(Boolean)
     const playerName = parts[0] || rest
     const team = parts.length > 1 ? parts[1] : null
@@ -239,8 +236,7 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Step 2: Scrape the page as MARKDOWN (not JSON) to get ALL card rows
-  // LLM JSON extraction truncates large sets — markdown parsing gets everything
+  // Step 2: Scrape the page as MARKDOWN to get ALL card rows
   let parsedCards: ParsedCard[] = []
   let setNameFromPage: string | null = null
 
@@ -254,14 +250,71 @@ export async function POST(request: NextRequest) {
     if (markdown) {
       parsedCards = parseChecklistFromMarkdown(markdown)
 
-      // Try to extract set name from page title (usually first heading)
+      // Try to extract set name from page title
       const titleMatch = markdown.match(/^#\s+(.+)/m)
       if (titleMatch) {
-        setNameFromPage = titleMatch[1].trim()
+        setNameFromPage = cleanCell(titleMatch[1])
       }
     }
   } catch (err) {
     console.error('Firecrawl scrape error:', err)
+  }
+
+  // If markdown parsing found nothing, fall back to JSON extraction for small sets
+  if (parsedCards.length === 0) {
+    try {
+      const jsonResult = await firecrawl.scrape(sourceUrl, {
+        formats: [
+          {
+            type: 'json',
+            schema: {
+              type: 'object',
+              properties: {
+                cards: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      card_number: { type: 'string' },
+                      player_name: { type: 'string' },
+                      team: { type: 'string' },
+                    },
+                    required: ['card_number', 'player_name'],
+                  },
+                },
+              },
+              required: ['cards'],
+            },
+            prompt: `Extract every card from this trading card checklist. For each card return card_number and player_name. The set is "${year} ${setName}" for ${sport}.`,
+          },
+        ],
+      })
+
+      interface JsonCard {
+        card_number?: string
+        player_name?: string
+        team?: string
+      }
+
+      if (jsonResult.json) {
+        const data = jsonResult.json as { cards?: JsonCard[] }
+        if (data.cards && Array.isArray(data.cards)) {
+          parsedCards = data.cards
+            .filter((c) => c.card_number && c.player_name)
+            .map((c) => ({
+              card_number: c.card_number!,
+              player_name: c.player_name || null,
+              team: c.team || null,
+              position: null,
+              variation: null,
+              is_short_print: false,
+              is_rookie: false,
+            }))
+        }
+      }
+    } catch (err) {
+      console.error('Firecrawl JSON fallback error:', err)
+    }
   }
 
   if (parsedCards.length === 0) {
@@ -315,7 +368,6 @@ export async function POST(request: NextRequest) {
     is_rookie: card.is_rookie,
   }))
 
-  // Insert in chunks to avoid payload limits
   const CHUNK_SIZE = 500
   for (let i = 0; i < checklistRows.length; i += CHUNK_SIZE) {
     const chunk = checklistRows.slice(i, i + CHUNK_SIZE)
