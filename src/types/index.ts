@@ -163,6 +163,7 @@ export interface ScrapedCardSet {
   year: number | null
   brand: string | null
   series: string | null
+  subset_type: string
   total_cards: number | null
   source_url: string | null
   last_scraped_at: string | null

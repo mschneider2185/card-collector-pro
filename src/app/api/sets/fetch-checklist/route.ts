@@ -180,6 +180,7 @@ export async function POST(request: NextRequest) {
     year,
     brand,
     series,
+    subset_type: 'base',
     total_cards: extractedData.total_cards || extractedData.cards.length,
     source_url: sourceUrl,
     last_scraped_at: new Date().toISOString(),
