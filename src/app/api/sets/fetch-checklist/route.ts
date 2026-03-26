@@ -16,6 +16,27 @@ interface ParsedCard {
   is_rookie: boolean
 }
 
+/** Returns true if a string looks like garbage (markdown images, base64, URLs, nav). */
+function isGarbage(text: string): boolean {
+  if (!text) return true
+  // Markdown image/link syntax
+  if (text.includes('![') || text.includes('](')) return true
+  // Base64 data
+  if (text.includes('Base64') || text.includes('data:image')) return true
+  // URL-heavy content
+  if (text.includes('https://') || text.includes('http://')) return true
+  // HTML tags
+  if (/<[a-z][\s\S]*>/i.test(text)) return true
+  // Navigation / UI text
+  if (/^(options|checklist|set links|printable|view|gallery|sort)/i.test(text)) return true
+  return false
+}
+
+/** Strip markdown link syntax: [text](url) → text */
+function stripLinks(text: string): string {
+  return text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').trim()
+}
+
 /**
  * Parse card rows from a TCDB markdown page.
  *
@@ -24,6 +45,9 @@ interface ParsedCard {
  *
  * We also handle non-table list formats like:
  *   1 Player Name Team
+ *
+ * Filters out markdown image/link syntax, base64 data, and nav content
+ * that would otherwise be mis-parsed as card data.
  */
 function parseChecklistFromMarkdown(markdown: string): ParsedCard[] {
   const cards: ParsedCard[] = []
@@ -31,23 +55,28 @@ function parseChecklistFromMarkdown(markdown: string): ParsedCard[] {
   const lines = markdown.split('\n')
 
   // Strategy 1: Parse markdown table rows
-  // Look for rows that start with | and have a card number in the first cell
   for (const line of lines) {
     if (!line.startsWith('|')) continue
     // Skip header separator rows like |---|---|
     if (/^\|[\s-:|]+\|$/.test(line)) continue
+    // Skip lines with markdown images (base64 thumbnails from TCDB)
+    if (line.includes('![') || line.includes('Base64') || line.includes('data:image')) continue
 
-    const cells = line.split('|').map(c => c.trim()).filter(c => c.length > 0)
+    const cells = line.split('|').map(c => stripLinks(c).trim()).filter(c => c.length > 0)
     if (cells.length < 2) continue
 
-    // First cell should be a card number (numeric, or alphanumeric like "RC-1")
-    const cardNum = cells[0]
-    if (!cardNum || /^[#\s]*$/.test(cardNum)) continue
+    // First cell should be a card number (numeric, or alphanumeric like "RC-1", "1a")
+    const cardNum = cells[0].replace(/^#/, '').trim()
+    if (!cardNum) continue
+    // Must start with a digit or be a known card number pattern
+    if (!/^\d/.test(cardNum) && !/^[A-Z]{1,4}-?\d/i.test(cardNum)) continue
     // Skip header rows
-    if (/^(#|number|card|no\.?|num)$/i.test(cardNum)) continue
+    if (/^(number|card|no\.?|num|#)$/i.test(cardNum)) continue
 
     const playerName = cells[1] || null
-    if (!playerName || /^(name|player|description)$/i.test(playerName)) continue
+    if (!playerName || isGarbage(playerName)) continue
+    // Skip header rows
+    if (/^(name|player|description|image)$/i.test(playerName)) continue
 
     const key = `${cardNum}|${playerName}`
     if (seen.has(key)) continue
@@ -58,10 +87,10 @@ function parseChecklistFromMarkdown(markdown: string): ParsedCard[] {
     const fullLine = line.toLowerCase()
 
     cards.push({
-      card_number: cardNum.replace(/^#/, '').trim(),
+      card_number: cardNum,
       player_name: playerName,
-      team: team && !/^(team|club)$/i.test(team) ? team : null,
-      position: position && !/^(pos|position)$/i.test(position) ? position : null,
+      team: team && !isGarbage(team) && !/^(team|club)$/i.test(team) ? team : null,
+      position: position && !isGarbage(position) && !/^(pos|position)$/i.test(position) ? position : null,
       variation: null,
       is_short_print: fullLine.includes(' sp') || fullLine.includes('short print'),
       is_rookie: fullLine.includes(' rc') || fullLine.includes('rookie'),
@@ -70,23 +99,29 @@ function parseChecklistFromMarkdown(markdown: string): ParsedCard[] {
 
   if (cards.length > 0) return cards
 
-  // Strategy 2: Parse non-table formats — look for lines starting with a number
-  // Pattern: "123 Player Name Team" or "#123 Player Name"
-  const linePattern = /^#?(\d+[a-zA-Z]?)\s+(.+)/
+  // Strategy 2: Parse non-table formats — look for lines with card numbers and names
+  // TCDB often renders as: [number](link) Player Name · Team
+  // Or plain: 123 Player Name Team
   for (const line of lines) {
-    const match = line.trim().match(linePattern)
+    const stripped = stripLinks(line.trim())
+    if (!stripped) continue
+    // Skip lines that are mostly markdown image/link junk
+    if (isGarbage(stripped)) continue
+
+    // Try pattern: number followed by player name
+    const match = stripped.match(/^#?(\d+[a-zA-Z]?)\s+(.+)/)
     if (!match) continue
 
     const cardNum = match[1]
     const rest = match[2].trim()
-    if (!rest) continue
+    if (!rest || isGarbage(rest)) continue
 
     const key = `${cardNum}|${rest}`
     if (seen.has(key)) continue
     seen.add(key)
 
-    // Try to split "Player Name Team" — team is often the last 1-2 words
-    const parts = rest.split(/\s{2,}|\t/)
+    // Split on double-space, tab, or · (middle dot)
+    const parts = rest.split(/\s{2,}|\t|·/).map(p => p.trim()).filter(Boolean)
     const playerName = parts[0] || rest
     const team = parts.length > 1 ? parts[1] : null
 
