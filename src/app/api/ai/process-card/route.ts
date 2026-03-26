@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { smartCardVisionExtraction, verifyCardMatch } from '@/lib/llm-extraction'
+import { matchCardToChecklist, SetMatchResult } from '@/lib/set-matching'
 
 export const runtime = 'edge'
 
@@ -270,7 +271,15 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        send({ status: 'completed', extractedData })
+        // ── Auto-match to set checklist (non-blocking) ─────────────────
+        let setMatch: SetMatchResult | null = null
+        try {
+          setMatch = await matchCardToChecklist(supabase, extractedData)
+        } catch (matchErr) {
+          console.error('Set matching failed (non-blocking):', matchErr)
+        }
+
+        send({ status: 'completed', extractedData, setMatch })
       } catch (error) {
         console.error('Edge processing error:', error)
         const message = error instanceof Error ? error.message : 'Unknown error'
