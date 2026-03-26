@@ -452,6 +452,19 @@ function CardTile({ userCard, onClick }: { userCard: UserCard; onClick: () => vo
         {userCard.quantity > 1 && (
           <span className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-mono)' }}>×{userCard.quantity}</span>
         )}
+        {/* Set completion link */}
+        {(userCard as UserCard & { checklist?: { set_id: string } | null }).checklist?.set_id && (
+          <Link
+            href={`/sets/${(userCard as UserCard & { checklist: { set_id: string } }).checklist.set_id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-[10px] font-semibold mt-0.5 transition-colors hover:underline"
+            style={{ color: 'var(--color-text-muted)' }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-accent)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-muted)')}
+          >
+            View Full Set →
+          </Link>
+        )}
       </div>
     </div>
   )
@@ -500,7 +513,7 @@ export default function CollectionClient({ userCards: initialUserCards, searchPa
       try {
         let query = supabase
           .from('user_cards')
-          .select('*, card:cards(*)')
+          .select('*, card:cards(*), checklist:set_checklist(id, set_id)')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
 

@@ -55,6 +55,7 @@ export interface UserCard {
   user_id: string
   card_id: string
   card?: Card
+  checklist_id?: string | null
   quantity: number
   condition: string | null
   is_for_trade: boolean
@@ -148,6 +149,48 @@ export interface ProcessedBatchCard {
   position: number
   card_id: string | null
   needs_review: boolean
+}
+
+// =============================================================================
+// Scraped set checklist types (card_sets + set_checklist tables)
+// =============================================================================
+
+/** A scraped card set from TCDB or similar source. */
+export interface ScrapedCardSet {
+  id: string
+  name: string
+  sport: string | null
+  year: number | null
+  brand: string | null
+  series: string | null
+  total_cards: number | null
+  source_url: string | null
+  last_scraped_at: string | null
+  created_at: string
+}
+
+/** A single card slot in a scraped set checklist. */
+export interface SetChecklistCard {
+  id: string
+  set_id: string
+  card_number: string
+  player_name: string | null
+  team: string | null
+  position: string | null
+  variation: string | null
+  is_short_print: boolean
+  is_rookie: boolean
+  image_url: string | null
+  created_at: string
+}
+
+/** Completion stats returned by the completion API. */
+export interface SetCompletionResult {
+  set: ScrapedCardSet
+  total: number
+  owned: number
+  completion_percentage: number
+  checklist: (SetChecklistCard & { owned: boolean })[]
 }
 
 // =============================================================================
