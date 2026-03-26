@@ -26,6 +26,9 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
 
 # AI Processing (Required for card recognition)
 OPENAI_API_KEY=your_openai_api_key_here
+
+# Set Tracker — Firecrawl (Required for TCDB checklist scraping)
+FIRECRAWL_API_KEY=your_firecrawl_api_key_here
 ```
 
 ## AI Pipeline Architecture
@@ -58,4 +61,9 @@ as a fallback — all other features (collection management, browsing, auth) wor
 
 ### Processing times out
 - GPT-4o Vision typically responds in 3–8 seconds
-- Vercel serverless function limit is 60 seconds — well within range
+- The process-card route uses Edge Runtime (not serverless) to support streaming up to 300s
+
+### "Could not extract checklist data"
+- Verify `FIRECRAWL_API_KEY` is set in Vercel environment variables
+- The Set Tracker uses Firecrawl to search and scrape TCDB for card checklists
+- Check Vercel function logs for the specific Firecrawl error

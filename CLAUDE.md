@@ -38,6 +38,9 @@ Active tracks: Track A (Core product), Track C (Quality)
 - Auth working: email/password + Google OAuth
 - AI pipeline working: GPT-4o Vision via Edge Runtime SSE streaming
 - Supabase MCP is connected in Cursor
+- Set completion tracking: in progress (Firecrawl + TCDB scraping)
+- Firecrawl integration: active, Hobby plan
+- PDF checklist ingestion: planned, admin-only, Vercel serverless
 
 ## AI Pipeline - Architecture
 Upload front image (+ optional back) → client creates upload record in card_uploads →
@@ -84,7 +87,7 @@ Auth: email/password + Google OAuth
 
 ## Do Not
 - Do not use Google Cloud Vision API
-- Do not use Docker or Supabase Edge Functions
+- Do not use Docker
 - Do not commit .env.local
 - Do not install Supabase CLI via npm (it blocks global install)
 - Do not use getPublicUrl on card-uploads bucket (it's private)
@@ -93,8 +96,22 @@ Auth: email/password + Google OAuth
 - Do not use @supabase/supabase-js storage .download() in Edge Runtime (returns 400/Bucket not found)
 - Do not use waitUntil() or after() for background processing — neither executes reliably on Vercel Hobby
 
+## Edge Functions — Current Policy (March 2026)
+Supabase Edge Functions are now stable. Use them for:
+- Background/async processing (PDF ingestion, bulk imports)
+- Scheduled jobs (checklist monitoring, collection rematch)
+- Webhook handlers
+- Heavy compute that shouldn't block the frontend
+
+Keep in Next.js API routes (not Edge Functions):
+- Auth flows, session handling, anything with cookies
+- Firecrawl scraping routes (working well, don't migrate)
+- Card upload AI processing (working well, don't migrate)
+- Any user-facing route needing fast cold start
+
 ## Environment Variables (all set in Vercel + .env.local)
 NEXT_PUBLIC_SUPABASE_URL=https://gbsqgodoyuxsnaxnxjiq.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY
 OPENAI_API_KEY
+FIRECRAWL_API_KEY
