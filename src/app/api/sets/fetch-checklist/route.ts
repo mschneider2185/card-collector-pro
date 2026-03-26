@@ -26,9 +26,9 @@ interface FirecrawlExtraction {
  * POST /api/sets/fetch-checklist
  *
  * Fetches a full set checklist. Checks Supabase first — if the set already
- * exists with a checklist, returns cached data. Otherwise scrapes TCDB via
- * Firecrawl structured extraction, seeds both card_sets and set_checklist,
- * and returns the result.
+ * exists with a checklist, returns cached data. Otherwise uses Firecrawl
+ * search to find the TCDB checklist page, then scrapes it with structured
+ * JSON extraction, seeds both card_sets and set_checklist, and returns the result.
  *
  * Body: { setName: string, sport: string, year: number }
  */
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── Scrape from TCDB via Firecrawl ─────────────────────────────────────
+  // ── Search & scrape via Firecrawl ──────────────────────────────────────
   if (!firecrawlApiKey) {
     return NextResponse.json(
       { error: 'FIRECRAWL_API_KEY is not configured' },
@@ -85,14 +85,43 @@ export async function POST(request: NextRequest) {
 
   const firecrawl = new FirecrawlApp({ apiKey: firecrawlApiKey })
 
-  // Build a TCDB search URL — TCDB uses this pattern for checklist pages
-  const searchQuery = encodeURIComponent(`${year} ${setName} ${sport}`)
-  const tcdbSearchUrl = `https://www.tcdb.com/ViewAll.cfm/sp/${sport}/year/${year}/sn/${searchQuery}`
+  // Step 1: Use Firecrawl search to find the TCDB checklist page
+  const searchQuery = `site:tcdb.com ${year} ${setName} ${sport} checklist`
+  let sourceUrl: string | null = null
 
+  try {
+    const searchResults = await firecrawl.search(searchQuery, { limit: 3 })
+
+    // Find a TCDB result with a checklist/ViewAll URL
+    const webResults = searchResults.web || []
+    const tcdbResults = webResults.filter(
+      (r) => 'url' in r && r.url?.includes('tcdb.com')
+    )
+
+    if (tcdbResults.length > 0) {
+      // Prefer ViewAll or Checklist pages
+      const checklistPage = tcdbResults.find(
+        (r) => 'url' in r && (r.url?.includes('ViewAll.cfm') || r.url?.includes('Checklist.cfm'))
+      )
+      const best = checklistPage || tcdbResults[0]
+      sourceUrl = 'url' in best ? best.url : null
+    }
+  } catch (err) {
+    console.error('Firecrawl search error:', err)
+  }
+
+  if (!sourceUrl) {
+    return NextResponse.json(
+      { error: `Could not find a TCDB checklist for "${year} ${setName} ${sport}". Try a more specific set name.` },
+      { status: 404 }
+    )
+  }
+
+  // Step 2: Scrape the found page with structured JSON extraction
   let extractedData: FirecrawlExtraction | null = null
 
   try {
-    const scrapeResult = await firecrawl.scrape(tcdbSearchUrl, {
+    const scrapeResult = await firecrawl.scrape(sourceUrl, {
       formats: [
         {
           type: 'json',
@@ -134,13 +163,12 @@ export async function POST(request: NextRequest) {
 
   if (!extractedData || !extractedData.cards || extractedData.cards.length === 0) {
     return NextResponse.json(
-      { error: 'Could not extract checklist data. The set may not be available on TCDB.' },
+      { error: `Found TCDB page (${sourceUrl}) but could not extract checklist data. The page may not contain a card list.` },
       { status: 404 }
     )
   }
 
   // ── Parse brand/series from setName ────────────────────────────────────
-  // Common patterns: "Topps Series 1", "Panini Prizm", "Upper Deck"
   const nameParts = setName.split(' ')
   const brand = nameParts[0] || setName
   const series = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null
@@ -153,7 +181,7 @@ export async function POST(request: NextRequest) {
     brand,
     series,
     total_cards: extractedData.total_cards || extractedData.cards.length,
-    source_url: tcdbSearchUrl,
+    source_url: sourceUrl,
     last_scraped_at: new Date().toISOString(),
   }
 
