@@ -39,7 +39,14 @@ interface ProcessingResult {
   processingMetadata?: Record<string, unknown>
 }
 
+function getQueryParam(key: string): string | null {
+  if (typeof window === 'undefined') return null
+  const params = new URLSearchParams(window.location.search)
+  return params.get(key)
+}
+
 export default function UploadPage() {
+  const prefillChecklistId = getQueryParam('checklist_id')
   const [user, setUser] = useState<User | null>(null)
   const [uploadMode, setUploadMode] = useState<'single' | 'sheet'>('single')
   const [uploading, setUploading] = useState(false)
@@ -53,6 +60,7 @@ export default function UploadPage() {
   const [processingStep, setProcessingStep] = useState<string>('')
   const [showCamera, setShowCamera] = useState(false)
   const [cameraMode, setCameraMode] = useState<'front' | 'back'>('front')
+  const [matchedChecklistId, setMatchedChecklistId] = useState<string | null>(prefillChecklistId)
   const [cardData, setCardData] = useState<CardData>({
     sport: '',
     year: new Date().getFullYear(),
@@ -209,6 +217,10 @@ export default function UploadPage() {
               setProcessingStep(event.step)
             } else if (event.status === 'completed') {
               const data = event.extractedData as CardExtractionResult
+              // Capture auto-match checklist_id (prefill takes priority)
+              if (!prefillChecklistId && event.setMatch?.auto_matched && event.setMatch?.checklist_id) {
+                setMatchedChecklistId(event.setMatch.checklist_id)
+              }
               setProcessingResult({
                 uploadId: uploadRecord.id,
                 imagePath: frontImagePath,
@@ -386,7 +398,8 @@ export default function UploadPage() {
           card_id: cardId,
           quantity: cardData.quantity,
           condition: cardData.condition,
-          notes: cardData.notes
+          notes: cardData.notes,
+          ...(matchedChecklistId ? { checklist_id: matchedChecklistId } : {}),
         })
 
       if (collectionError) {

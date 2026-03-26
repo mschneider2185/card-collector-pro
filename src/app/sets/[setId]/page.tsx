@@ -10,6 +10,7 @@ type Filter = 'all' | 'owned' | 'missing' | 'rookies' | 'short_prints'
 
 interface AnnotatedCard extends SetChecklistCard {
   owned: boolean
+  has_image: boolean
 }
 
 interface CompletionData {
@@ -75,57 +76,96 @@ export default function SetDetailPage() {
     setMarkingId(checklistCard.id)
 
     try {
-      // Create a card in the cards table, then link via user_cards with checklist_id
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       )
 
-      // Upsert a card entry
-      const cardData = {
-        player_name: checklistCard.player_name,
-        team: checklistCard.team,
-        position: checklistCard.position,
-        card_number: checklistCard.card_number,
-        sport: data?.set.sport || null,
-        year: data?.set.year || null,
-        brand: data?.set.brand || null,
-        series: data?.set.series || null,
-        variation: checklistCard.variation,
-      }
-
-      const { data: card, error: cardErr } = await supabase
-        .from('cards')
-        .insert(cardData)
-        .select('id')
-        .single()
-
-      if (cardErr || !card) {
-        console.error('Error creating card:', cardErr)
-        return
-      }
-
-      // Insert user_card with checklist_id
-      const { error: ucErr } = await supabase
+      // Step 1: Check if user already has an uploaded card matching this checklist entry
+      const { data: existingUserCards } = await supabase
         .from('user_cards')
-        .insert({
-          user_id: userId,
-          card_id: card.id,
-          checklist_id: checklistCard.id,
-          quantity: 1,
-          is_for_trade: false,
-        })
+        .select('id, card_id, checklist_id, card:cards(player_name, card_number, year, brand, front_image_url, image_url)')
+        .eq('user_id', userId)
+        .is('checklist_id', null)
 
-      if (ucErr) {
-        console.error('Error creating user_card:', ucErr)
-        return
+      let reconciled = false
+
+      if (existingUserCards && existingUserCards.length > 0) {
+        for (const uc of existingUserCards) {
+          const cardArr = uc.card as unknown as {
+            player_name: string | null; card_number: string | null;
+            year: number | null; brand: string | null;
+            front_image_url: string | null; image_url: string | null
+          }[] | null
+          const card = Array.isArray(cardArr) ? cardArr[0] : cardArr
+          if (!card) continue
+
+          const nameMatch = checklistCard.player_name && card.player_name &&
+            checklistCard.player_name.toLowerCase() === card.player_name.toLowerCase()
+          const numMatch = checklistCard.card_number && card.card_number &&
+            checklistCard.card_number.replace(/^#/, '').trim() === card.card_number.replace(/^#/, '').trim()
+          const yearMatch = data?.set.year != null && card.year === data.set.year
+          const brandMatch = data?.set.brand && card.brand &&
+            data.set.brand.toLowerCase() === card.brand.toLowerCase()
+
+          if ((nameMatch && numMatch) || (nameMatch && yearMatch && brandMatch)) {
+            // Reconcile: update existing user_card with checklist_id
+            await supabase
+              .from('user_cards')
+              .update({ checklist_id: checklistCard.id })
+              .eq('id', uc.id)
+            reconciled = true
+            break
+          }
+        }
+      }
+
+      // Step 2: If no existing card found, create a new hollow record
+      if (!reconciled) {
+        const cardData = {
+          player_name: checklistCard.player_name,
+          team: checklistCard.team,
+          position: checklistCard.position,
+          card_number: checklistCard.card_number,
+          sport: data?.set.sport || null,
+          year: data?.set.year || null,
+          brand: data?.set.brand || null,
+          series: data?.set.series || null,
+          variation: checklistCard.variation,
+        }
+
+        const { data: card, error: cardErr } = await supabase
+          .from('cards')
+          .insert(cardData)
+          .select('id')
+          .single()
+
+        if (cardErr || !card) {
+          console.error('Error creating card:', cardErr)
+          return
+        }
+
+        const { error: ucErr } = await supabase
+          .from('user_cards')
+          .insert({
+            user_id: userId,
+            card_id: card.id,
+            checklist_id: checklistCard.id,
+            quantity: 1,
+            is_for_trade: false,
+          })
+
+        if (ucErr) {
+          console.error('Error creating user_card:', ucErr)
+          return
+        }
       }
 
       // Update local state
       setData((prev) => {
         if (!prev) return prev
         const updatedChecklist = prev.checklist.map((c) =>
-          c.id === checklistCard.id ? { ...c, owned: true } : c
+          c.id === checklistCard.id ? { ...c, owned: true, has_image: reconciled ? true : c.has_image } : c
         )
         const owned = updatedChecklist.filter((c) => c.owned).length
         return {
@@ -287,72 +327,13 @@ export default function SetDetailPage() {
         {/* Checklist Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
           {filteredChecklist.map((card) => (
-            <div
+            <ChecklistCardItem
               key={card.id}
-              className="flex items-center gap-3 px-3 py-2.5"
-              style={{
-                background: card.owned ? 'rgba(45, 106, 79, 0.06)' : 'var(--color-surface)',
-                border: `1px solid ${card.owned ? 'rgba(45, 106, 79, 0.2)' : 'var(--color-border)'}`,
-                borderRadius: '4px',
-              }}
-            >
-              {/* Status dot */}
-              <div
-                className="w-2 h-2 shrink-0 rounded-full"
-                style={{ background: card.owned ? 'var(--color-success)' : 'var(--color-border)' }}
-              />
-
-              {/* Card info */}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className="text-xs font-bold shrink-0"
-                    style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}
-                  >
-                    #{card.card_number}
-                  </span>
-                  {card.is_rookie && (
-                    <span className="badge badge-accent" style={{ fontSize: '9px', padding: '0 3px' }}>RC</span>
-                  )}
-                  {card.is_short_print && (
-                    <span className="badge badge-error" style={{ fontSize: '9px', padding: '0 3px' }}>SP</span>
-                  )}
-                </div>
-                <p
-                  className="text-sm truncate"
-                  style={{ color: card.owned ? 'var(--color-text)' : 'var(--color-text-secondary)' }}
-                >
-                  {card.player_name || 'Unknown'}
-                </p>
-                {card.team && (
-                  <p className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>
-                    {card.team}
-                  </p>
-                )}
-              </div>
-
-              {/* Action */}
-              {!card.owned && (
-                <button
-                  onClick={() => handleMarkOwned(card)}
-                  disabled={markingId === card.id}
-                  className="shrink-0 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-80 disabled:opacity-40"
-                  style={{
-                    background: 'var(--color-accent)',
-                    color: '#0D0D0D',
-                    borderRadius: '2px',
-                  }}
-                >
-                  {markingId === card.id ? '...' : 'Own'}
-                </button>
-              )}
-
-              {card.owned && (
-                <svg className="w-4 h-4 shrink-0" style={{ color: 'var(--color-success)' }} fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-              )}
-            </div>
+              card={card}
+              setId={setId}
+              marking={markingId === card.id}
+              onMarkOwned={() => handleMarkOwned(card)}
+            />
           ))}
         </div>
 
@@ -362,6 +343,126 @@ export default function SetDetailPage() {
           </div>
         )}
       </main>
+    </div>
+  )
+}
+
+/** Three-state checklist card item. */
+function ChecklistCardItem({
+  card,
+  setId,
+  marking,
+  onMarkOwned,
+}: {
+  card: AnnotatedCard
+  setId: string
+  marking: boolean
+  onMarkOwned: () => void
+}) {
+  // Three states:
+  // 1. owned + has_image → green, full checkmark
+  // 2. owned + no image  → yellow/amber, "no scan" + upload link
+  // 3. not owned          → gray, "Own" button
+
+  const ownedWithImage = card.owned && card.has_image
+  const ownedNoImage = card.owned && !card.has_image
+
+  return (
+    <div
+      className="flex items-center gap-3 px-3 py-2.5"
+      style={{
+        background: ownedWithImage
+          ? 'rgba(45, 106, 79, 0.06)'
+          : ownedNoImage
+          ? 'rgba(201, 168, 76, 0.04)'
+          : 'var(--color-surface)',
+        border: `1px solid ${
+          ownedWithImage
+            ? 'rgba(45, 106, 79, 0.2)'
+            : ownedNoImage
+            ? 'rgba(201, 168, 76, 0.2)'
+            : 'var(--color-border)'
+        }`,
+        borderRadius: '4px',
+      }}
+    >
+      {/* Status indicator */}
+      <div
+        className="w-2 h-2 shrink-0 rounded-full"
+        style={{
+          background: ownedWithImage
+            ? 'var(--color-success)'
+            : ownedNoImage
+            ? 'var(--color-accent)'
+            : 'var(--color-border)',
+        }}
+      />
+
+      {/* Card info */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span
+            className="text-xs font-bold shrink-0"
+            style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}
+          >
+            #{card.card_number}
+          </span>
+          {card.is_rookie && (
+            <span className="badge badge-accent" style={{ fontSize: '9px', padding: '0 3px' }}>RC</span>
+          )}
+          {card.is_short_print && (
+            <span className="badge badge-error" style={{ fontSize: '9px', padding: '0 3px' }}>SP</span>
+          )}
+        </div>
+        <p
+          className="text-sm truncate"
+          style={{ color: card.owned ? 'var(--color-text)' : 'var(--color-text-secondary)' }}
+        >
+          {card.player_name || 'Unknown'}
+        </p>
+        {card.team && (
+          <p className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>
+            {card.team}
+          </p>
+        )}
+      </div>
+
+      {/* Action / status */}
+      {ownedWithImage && (
+        <svg className="w-4 h-4 shrink-0" style={{ color: 'var(--color-success)' }} fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+        </svg>
+      )}
+
+      {ownedNoImage && (
+        <Link
+          href={`/upload?checklist_id=${card.id}&set_id=${setId}`}
+          onClick={(e) => e.stopPropagation()}
+          className="shrink-0 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-80"
+          style={{
+            border: '1px solid var(--color-accent)',
+            color: 'var(--color-accent)',
+            borderRadius: '2px',
+          }}
+        >
+          Scan
+        </Link>
+      )}
+
+      {!card.owned && (
+        <button
+          onClick={onMarkOwned}
+          disabled={marking}
+          className="shrink-0 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-80 disabled:opacity-40"
+          style={{
+            background: 'var(--color-accent)',
+            color: '#0D0D0D',
+            borderRadius: '2px',
+          }}
+        >
+          {marking ? '...' : 'Own'}
+        </button>
+      )}
     </div>
   )
 }
