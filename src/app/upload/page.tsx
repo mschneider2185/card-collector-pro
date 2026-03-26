@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { User } from '@supabase/supabase-js'
 import Link from 'next/link'
@@ -40,10 +39,14 @@ interface ProcessingResult {
   processingMetadata?: Record<string, unknown>
 }
 
+function getQueryParam(key: string): string | null {
+  if (typeof window === 'undefined') return null
+  const params = new URLSearchParams(window.location.search)
+  return params.get(key)
+}
+
 export default function UploadPage() {
-  const searchParams = useSearchParams()
-  const prefillChecklistId = searchParams.get('checklist_id')
-  const prefillSetId = searchParams.get('set_id')
+  const prefillChecklistId = getQueryParam('checklist_id')
   const [user, setUser] = useState<User | null>(null)
   const [uploadMode, setUploadMode] = useState<'single' | 'sheet'>('single')
   const [uploading, setUploading] = useState(false)
