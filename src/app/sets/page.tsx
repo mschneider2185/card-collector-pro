@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import type { ScrapedCardSet, SetChecklistCard } from '@/types'
 
@@ -19,6 +19,26 @@ export default function SetsSearchPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [results, setResults] = useState<FetchResult[]>([])
+  const [cachedSets, setCachedSets] = useState<ScrapedCardSet[]>([])
+  const [loadingCached, setLoadingCached] = useState(true)
+
+  // Load previously scraped sets on mount
+  useEffect(() => {
+    async function loadCachedSets() {
+      try {
+        const res = await fetch('/api/sets/list')
+        const data = await res.json()
+        if (res.ok && data.sets) {
+          setCachedSets(data.sets)
+        }
+      } catch {
+        // Silent fail — cached sets are a convenience, not critical
+      } finally {
+        setLoadingCached(false)
+      }
+    }
+    loadCachedSets()
+  }, [])
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,7 +61,7 @@ export default function SetsSearchPage() {
         return
       }
 
-      // Replace or add to results
+      // Add to search results
       setResults((prev) => {
         const existing = prev.findIndex((r) => r.set.id === data.set.id)
         if (existing >= 0) {
@@ -51,6 +71,14 @@ export default function SetsSearchPage() {
         }
         return [data, ...prev]
       })
+
+      // Also update cached sets list if this is new
+      if (!data.cached) {
+        setCachedSets((prev) => {
+          if (prev.some((s) => s.id === data.set.id)) return prev
+          return [data.set, ...prev]
+        })
+      }
     } catch {
       setError('Network error. Please try again.')
     } finally {
@@ -60,6 +88,9 @@ export default function SetsSearchPage() {
 
   const currentYear = new Date().getFullYear()
   const years = Array.from({ length: 50 }, (_, i) => currentYear - i)
+
+  // IDs of sets already shown in search results
+  const searchResultIds = new Set(results.map((r) => r.set.id))
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
@@ -89,7 +120,6 @@ export default function SetsSearchPage() {
         {/* Search Form */}
         <form onSubmit={handleSearch} className="space-y-4 mb-8">
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            {/* Set Name */}
             <div className="sm:col-span-2">
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
                 Set Name
@@ -108,8 +138,6 @@ export default function SetsSearchPage() {
                 }}
               />
             </div>
-
-            {/* Sport */}
             <div>
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
                 Sport
@@ -130,8 +158,6 @@ export default function SetsSearchPage() {
                 ))}
               </select>
             </div>
-
-            {/* Year */}
             <div>
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
                 Year
@@ -197,60 +223,38 @@ export default function SetsSearchPage() {
           </div>
         )}
 
-        {/* Results */}
+        {/* Search Results */}
         {!loading && results.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {results.map((result) => (
-              <Link
-                key={result.set.id}
-                href={`/sets/${result.set.id}`}
-                className="p-5 flex flex-col gap-3 card-lift"
-                style={{
-                  background: 'var(--color-surface)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: '4px',
-                }}
-              >
-                {/* Cached badge */}
-                {result.cached && (
-                  <span
-                    className="self-start text-[10px] uppercase tracking-widest font-semibold px-1.5 py-0.5"
-                    style={{ border: '1px solid var(--color-success)', color: 'var(--color-success)', borderRadius: '2px' }}
-                  >
-                    Cached
-                  </span>
-                )}
-
-                <div>
-                  <p
-                    className="text-xs uppercase tracking-widest mb-0.5"
-                    style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}
-                  >
-                    {result.set.year} · {result.set.brand}
-                  </p>
-                  <h2
-                    className="text-sm font-semibold leading-snug truncate"
-                    style={{ color: 'var(--color-text)' }}
-                    title={result.set.name}
-                  >
-                    {result.set.name}
-                  </h2>
-                </div>
-
-                <div
-                  className="flex items-center justify-between text-xs"
-                  style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}
-                >
-                  <span>{result.set.total_cards} cards</span>
-                  <span className="capitalize">{result.set.sport}</span>
-                </div>
-              </Link>
-            ))}
+          <div className="mb-8">
+            <h2 className="text-xs uppercase tracking-widest font-semibold mb-3" style={{ color: 'var(--color-text-muted)' }}>
+              Search Results
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {results.map((result) => (
+                <SetCard key={result.set.id} set={result.set} badge={result.cached ? 'cached' : 'new'} />
+              ))}
+            </div>
           </div>
         )}
 
-        {/* Empty state */}
-        {!loading && !error && results.length === 0 && (
+        {/* Previously Scraped Sets */}
+        {!loadingCached && cachedSets.filter((s) => !searchResultIds.has(s.id)).length > 0 && (
+          <div>
+            <h2 className="text-xs uppercase tracking-widest font-semibold mb-3" style={{ color: 'var(--color-text-muted)' }}>
+              Previously Fetched Sets
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {cachedSets
+                .filter((s) => !searchResultIds.has(s.id))
+                .map((set) => (
+                  <SetCard key={set.id} set={set} />
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* Empty state — only when no cached sets and no search results */}
+        {!loading && !error && results.length === 0 && !loadingCached && cachedSets.length === 0 && (
           <div className="py-20 flex flex-col items-center text-center">
             <div
               className="w-14 h-14 flex items-center justify-center mb-5"
@@ -270,5 +274,61 @@ export default function SetsSearchPage() {
         )}
       </main>
     </div>
+  )
+}
+
+/** Reusable card component for displaying a set. */
+function SetCard({ set, badge }: { set: ScrapedCardSet; badge?: 'cached' | 'new' }) {
+  return (
+    <Link
+      href={`/sets/${set.id}`}
+      className="p-5 flex flex-col gap-3 card-lift"
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: '4px',
+      }}
+    >
+      {badge === 'cached' && (
+        <span
+          className="self-start text-[10px] uppercase tracking-widest font-semibold px-1.5 py-0.5"
+          style={{ border: '1px solid var(--color-success)', color: 'var(--color-success)', borderRadius: '2px' }}
+        >
+          Cached
+        </span>
+      )}
+      {badge === 'new' && (
+        <span
+          className="self-start text-[10px] uppercase tracking-widest font-semibold px-1.5 py-0.5"
+          style={{ border: '1px solid var(--color-accent)', color: 'var(--color-accent)', borderRadius: '2px' }}
+        >
+          New
+        </span>
+      )}
+
+      <div>
+        <p
+          className="text-xs uppercase tracking-widest mb-0.5"
+          style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}
+        >
+          {set.year} · {set.brand}
+        </p>
+        <h2
+          className="text-sm font-semibold leading-snug truncate"
+          style={{ color: 'var(--color-text)' }}
+          title={set.name}
+        >
+          {set.name}
+        </h2>
+      </div>
+
+      <div
+        className="flex items-center justify-between text-xs"
+        style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}
+      >
+        <span>{set.total_cards} cards</span>
+        <span className="capitalize">{set.sport}</span>
+      </div>
+    </Link>
   )
 }
