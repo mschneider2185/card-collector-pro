@@ -8,6 +8,9 @@ interface SearchParams {
   sport?: string
   year?: string
   trade?: string
+  sort?: string
+  view?: string
+  attrs?: string
 }
 
 async function getUserCards() {
@@ -74,13 +77,13 @@ export default async function CollectionPage({
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        {/* Stats Dashboard */}
+        {/* Portfolio Summary */}
         <CollectionStatsDashboard />
 
         {/* Filters */}
         <CollectionFilters sports={sports} years={years} />
 
-        {/* Gallery */}
+        {/* Collection Content */}
         <CollectionClient userCards={userCards} searchParams={resolvedSearchParams} />
       </main>
     </div>

@@ -45,6 +45,9 @@ export interface Card {
   confidence_score?: number | null
   ocr_text?: string | null
   processing_metadata?: Record<string, unknown> | null
+  last_sale_price?: number | null
+  last_sale_date?: string | null
+  price_history?: Array<{ date: string; price: number }> | null
   last_updated?: string
   source_upload_id?: string
   created_at: string
