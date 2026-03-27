@@ -192,11 +192,8 @@ export default function CardsClient({ searchParams }: CardsClientProps) {
   const [cards, setCards] = useState<CardWithTradeInfo[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Keep auth state fresh — don't rely solely on a one-time mount check
+  // Keep auth state fresh via onAuthStateChange
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-    })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
     })

@@ -485,27 +485,14 @@ export default function CollectionClient({ userCards: initialUserCards, searchPa
   const [selectedCard, setSelectedCard] = useState<UserCard | null>(null)
   const [userCards, setUserCards] = useState<UserCard[]>(initialUserCards)
   const [user, setUser] = useState<User | null>(null)
-  const [authResolved, setAuthResolved] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  // Keep auth state fresh with a persistent listener
+  // Fetch user cards once auth state is ready
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      setAuthResolved(true)
-    })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      setAuthResolved(true)
-    })
-    return () => subscription.unsubscribe()
-  }, [])
+    const fetchUserCards = async (currentUser: User | null) => {
+      setUser(currentUser)
 
-  useEffect(() => {
-    if (!authResolved) return // wait for auth to resolve before fetching or showing "sign in"
-
-    const fetchUserCards = async () => {
-      if (!user) {
+      if (!currentUser) {
         setLoading(false)
         return
       }
@@ -514,7 +501,7 @@ export default function CollectionClient({ userCards: initialUserCards, searchPa
         let query = supabase
           .from('user_cards')
           .select('*, card:cards(*), checklist:set_checklist(id, set_id)')
-          .eq('user_id', user.id)
+          .eq('user_id', currentUser.id)
           .order('created_at', { ascending: false })
 
         if (searchParams.q)
@@ -536,8 +523,14 @@ export default function CollectionClient({ userCards: initialUserCards, searchPa
       }
     }
 
-    fetchUserCards()
-  }, [authResolved, user, searchParams.q, searchParams.sport, searchParams.year, searchParams.trade])
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        fetchUserCards(session?.user ?? null)
+      }
+    )
+
+    return () => subscription.unsubscribe()
+  }, [searchParams.q, searchParams.sport, searchParams.year, searchParams.trade])
 
   const handleDeleteCard = async (userCardId: string) => {
     const { error } = await supabase.from('user_cards').delete().eq('id', userCardId)

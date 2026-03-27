@@ -81,15 +81,10 @@ export default function UploadPage() {
   })
 
   useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setUser(session?.user ?? null)
-    }
-    checkSession()
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
     })
+
     return () => subscription.unsubscribe()
   }, [])
 

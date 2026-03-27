@@ -17,26 +17,22 @@ export default function SettingsPage() {
   const [username, setUsername] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
-  // Load current user data
+  // Load current user data once auth state is ready
   useEffect(() => {
-    const loadUser = async () => {
-      try {
-        // Get authenticated user
-        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
-        if (authError) throw authError
-        
-        if (!authUser) {
-          alert('Please sign in to access settings')
-          return
-        }
+    const loadUser = async (sessionUser: { id: string; email?: string } | null) => {
+      if (!sessionUser) {
+        setLoading(false)
+        return
+      }
 
-        setAuthUser(authUser)
+      try {
+        setAuthUser(sessionUser)
 
         // Get user profile from database
         const { data: userProfile, error: profileError } = await supabase
           .from('users')
           .select('*')
-          .eq('id', authUser.id)
+          .eq('id', sessionUser.id)
           .single()
 
         if (profileError) {
@@ -44,16 +40,16 @@ export default function SettingsPage() {
           // Create user profile if it doesn't exist
           const { data: newProfile, error: createError } = await supabase
             .from('users')
-            .insert({ id: authUser.id })
+            .insert({ id: sessionUser.id })
             .select()
             .single()
-          
+
           if (createError) {
             console.error('Error creating user profile:', createError)
             alert('Error loading user profile')
             return
           }
-          
+
           setUser(newProfile)
           setUsername(newProfile.username || '')
           setAvatarUrl(newProfile.avatar_url)
@@ -70,7 +66,13 @@ export default function SettingsPage() {
       }
     }
 
-    loadUser()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        loadUser(session?.user ?? null)
+      }
+    )
+
+    return () => subscription.unsubscribe()
   }, [])
 
   // Validate username
