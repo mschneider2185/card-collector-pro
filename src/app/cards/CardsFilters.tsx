@@ -83,7 +83,7 @@ export default function CardsFilters({ sports, years }: CardsFiltersProps) {
           <option value="">All Sports</option>
           {sports.map(sportOption => (
             <option key={sportOption} value={sportOption}>
-              {sportOption.charAt(0).toUpperCase() + sportOption.slice(1)}
+              {sportOption}
             </option>
           ))}
         </select>

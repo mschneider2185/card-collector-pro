@@ -10,19 +10,14 @@ interface SearchParams {
   patch?: string
 }
 
-async function getCards() {
-  return []
-}
-
 export default async function CardsPage({
   searchParams,
 }: {
   searchParams: Promise<SearchParams>
 }) {
-  const cards = await getCards()
   const resolvedSearchParams = await searchParams
 
-  const sports = ['baseball', 'basketball', 'football', 'hockey', 'pokemon', 'soccer']
+  const sports = ['Baseball', 'Basketball', 'Football', 'Hockey', 'Pokemon', 'Soccer']
   const years = Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i)
 
   return (
@@ -41,18 +36,6 @@ export default async function CardsPage({
         >
           Browse Cards
         </h1>
-
-        <span
-          className="text-xs font-medium px-2 py-1"
-          style={{
-            fontFamily: 'var(--font-mono)',
-            color: 'var(--color-text-muted)',
-            border: '1px solid var(--color-border)',
-            borderRadius: '2px',
-          }}
-        >
-          {cards.length.toLocaleString()} cards
-        </span>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">

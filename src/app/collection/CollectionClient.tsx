@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { UserCard, Card } from '@/types'
 import { User } from '@supabase/supabase-js'
+import { useCardSetData, SetCompletionData } from '@/hooks/useCardSetData'
 import Link from 'next/link'
 import Image from 'next/image'
 import {
@@ -681,15 +682,6 @@ function CollectionTable({ userCards, onSelect }: { userCards: UserCard[]; onSel
 
 // ─── Set Completion Panel ─────────────────────────────────────────────────────
 
-interface SetCompletionData {
-  set_id: string
-  set_name: string
-  brand: string
-  year: number
-  total_cards: number | null
-  cards_owned: number
-}
-
 function SetCompletionPanel({ sets }: { sets: SetCompletionData[] }) {
   if (sets.length === 0) return null
 
@@ -799,7 +791,8 @@ export default function CollectionClient({ userCards: initialUserCards, searchPa
   const [userCards, setUserCards] = useState<UserCard[]>(initialUserCards)
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  const [setCompletionData, setSetCompletionData] = useState<SetCompletionData[]>([])
+  const cardIds = useMemo(() => userCards.filter(uc => uc.card_id).map(uc => uc.card_id), [userCards])
+  const { setCompletionData, cardSetMap, getSetForCard } = useCardSetData(cardIds)
 
   const viewMode = (searchParams.view as 'grid' | 'table') || 'grid'
   const sortKey = searchParams.sort || 'recent'
@@ -850,54 +843,10 @@ export default function CollectionClient({ userCards: initialUserCards, searchPa
     return () => subscription.unsubscribe()
   }, [searchParams.q, searchParams.sport, searchParams.year, searchParams.trade])
 
-  // Fetch set completion data
-  useEffect(() => {
-    if (!user) return
-    async function fetchSets() {
-      try {
-        const { data, error } = await supabase
-          .from('card_set_memberships')
-          .select('set_id, card_id, card_sets(id, name, brand, year, total_cards)')
-          .in('card_id', userCards.filter(uc => uc.card_id).map(uc => uc.card_id))
-
-        if (error || !data) return
-
-        const setMap = new Map<string, SetCompletionData>()
-        for (const row of data) {
-          const setInfo = row.card_sets as unknown as { id: string; name: string; brand: string; year: number; total_cards: number | null }
-          if (!setInfo) continue
-          const existing = setMap.get(setInfo.id)
-          if (existing) {
-            existing.cards_owned++
-          } else {
-            setMap.set(setInfo.id, {
-              set_id: setInfo.id,
-              set_name: setInfo.name,
-              brand: setInfo.brand,
-              year: setInfo.year,
-              total_cards: setInfo.total_cards,
-              cards_owned: 1,
-            })
-          }
-        }
-
-        setSetCompletionData(
-          [...setMap.values()].sort((a, b) => {
-            const pctA = a.total_cards ? a.cards_owned / a.total_cards : 0
-            const pctB = b.total_cards ? b.cards_owned / b.total_cards : 0
-            return pctB - pctA
-          })
-        )
-      } catch (err) {
-        console.error('Error fetching set completion:', err)
-      }
-    }
-    if (userCards.length > 0) fetchSets()
-  }, [user, userCards])
-
   // Client-side attribute filtering and sorting
   const filteredAndSorted = useMemo(() => {
-    let result = [...userCards]
+    // Filter out hollow cards (no player name — these only appear in set completion context)
+    let result = userCards.filter(uc => uc.card?.player_name)
 
     // Apply attribute filters
     if (activeAttrs.length > 0) {
@@ -921,10 +870,7 @@ export default function CollectionClient({ userCards: initialUserCards, searchPa
   // Find set completion for selected card
   const selectedSetCompletion = useMemo(() => {
     if (!selectedCard?.card_id) return null
-    const membership = setCompletionData.find(s => {
-      // Check if selected card belongs to this set via the fetched memberships
-      return true // simplified - we show the first matching set
-    })
+    const membership = getSetForCard(selectedCard.card_id)
     if (!membership) return null
     return {
       setName: `${membership.year} ${membership.brand} ${membership.set_name}`,
@@ -932,7 +878,7 @@ export default function CollectionClient({ userCards: initialUserCards, searchPa
       total: membership.total_cards ?? 0,
       setId: membership.set_id,
     }
-  }, [selectedCard, setCompletionData])
+  }, [selectedCard, getSetForCard])
 
   const handleDeleteCard = async (userCardId: string) => {
     const { error } = await supabase.from('user_cards').delete().eq('id', userCardId)

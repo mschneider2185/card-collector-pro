@@ -61,6 +61,8 @@ export default function UploadPage() {
   const [showCamera, setShowCamera] = useState(false)
   const [cameraMode, setCameraMode] = useState<'front' | 'back'>('front')
   const [matchedChecklistId, setMatchedChecklistId] = useState<string | null>(prefillChecklistId)
+  const [matchedSetId, setMatchedSetId] = useState<string | null>(null)
+  const [imageQuality, setImageQuality] = useState<{ score: number; issues: string[]; is_physical_card: boolean } | null>(null)
   const [cardData, setCardData] = useState<CardData>({
     sport: '',
     year: new Date().getFullYear(),
@@ -215,6 +217,13 @@ export default function UploadPage() {
               // Capture auto-match checklist_id (prefill takes priority)
               if (!prefillChecklistId && event.setMatch?.auto_matched && event.setMatch?.checklist_id) {
                 setMatchedChecklistId(event.setMatch.checklist_id)
+                if (event.setMatch.set_id) {
+                  setMatchedSetId(event.setMatch.set_id)
+                }
+              }
+              // Capture image quality assessment
+              if (event.imageQuality) {
+                setImageQuality(event.imageQuality)
               }
               setProcessingResult({
                 uploadId: uploadRecord.id,
@@ -400,6 +409,16 @@ export default function UploadPage() {
       if (collectionError) {
         console.error('Error adding to collection:', collectionError)
         throw collectionError
+      }
+
+      // Ensure card_set_memberships exists for the matched set
+      if (matchedSetId && cardId) {
+        await supabase
+          .from('card_set_memberships')
+          .upsert(
+            { card_id: cardId, set_id: matchedSetId, set_card_number: cardData.card_number || null },
+            { onConflict: 'card_id,set_id' }
+          )
       }
 
       alert('Card added to your collection successfully!')
@@ -808,6 +827,54 @@ export default function UploadPage() {
                       </span>
                     )}
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Image Quality Warning */}
+          {showCardForm && imageQuality && imageQuality.score < 0.7 && (
+            <div
+              className="mt-6 p-4"
+              style={{
+                background: imageQuality.score < 0.4 ? 'rgba(220, 38, 38, 0.1)' : 'rgba(234, 179, 8, 0.1)',
+                border: `1px solid ${imageQuality.score < 0.4 ? 'rgba(220, 38, 38, 0.3)' : 'rgba(234, 179, 8, 0.3)'}`,
+                borderRadius: '4px',
+              }}
+            >
+              <div className="flex items-start gap-3">
+                <span className="text-lg flex-shrink-0">{imageQuality.score < 0.4 ? '\u26A0' : '\u24D8'}</span>
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: imageQuality.score < 0.4 ? '#dc2626' : '#ca8a04' }}>
+                    {imageQuality.score < 0.4
+                      ? 'Poor image quality — consider retaking the photo'
+                      : 'Image quality could be improved'}
+                  </p>
+                  {imageQuality.issues.length > 0 && (
+                    <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                      Issues detected: {imageQuality.issues.join(', ')}
+                    </p>
+                  )}
+                  {!imageQuality.is_physical_card && (
+                    <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                      This appears to be a screenshot or digital image rather than a photo of a physical card.
+                    </p>
+                  )}
+                  {imageQuality.score < 0.4 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCardForm(false)
+                        setProcessingResult(null)
+                        setUploadedImage(null)
+                        setImageQuality(null)
+                      }}
+                      className="mt-2 text-xs font-semibold px-3 py-1.5 rounded transition-colors"
+                      style={{ background: 'rgba(220, 38, 38, 0.15)', color: '#dc2626' }}
+                    >
+                      Discard and retake
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

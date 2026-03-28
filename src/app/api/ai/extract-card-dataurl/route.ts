@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
       team: c.team_name ?? null,
       position: c.position ?? null,
       confidence_score: c.confidence ?? null,
+      image_quality_score: c.image_quality?.score ?? null,
       ocr_text: c.raw_ocr_text ?? null,
       rookie: c.attributes?.rookie ?? false,
       autographed: c.attributes?.autographed ?? false,

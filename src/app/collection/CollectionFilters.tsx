@@ -202,7 +202,7 @@ export default function CollectionFilters({ sports, years }: CollectionFiltersPr
           >
             <option value="">All Sports</option>
             {sports.map(s => (
-              <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+              <option key={s} value={s}>{s}</option>
             ))}
           </select>
 

@@ -198,6 +198,7 @@ export async function POST(request: NextRequest) {
             image_url: cropImageUrls[cardPos.position] || sheetPublicUrl,
             front_image_url: cropImageUrls[cardPos.position] || sheetPublicUrl,
             confidence_score: c.confidence ?? 0.5,
+            image_quality_score: c.image_quality?.score ?? null,
             ocr_text: c.raw_ocr_text ?? '',
             processing_metadata: {
               vision_model: 'gpt-4o',

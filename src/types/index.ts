@@ -15,6 +15,11 @@ export interface CardExtractionResult {
   }
   confidence?: number
   raw_ocr_text?: string
+  image_quality?: {
+    score: number
+    issues: string[]
+    is_physical_card: boolean
+  }
 }
 
 export interface Card {
@@ -43,6 +48,7 @@ export interface Card {
   error?: boolean
   estimated_value?: number | null
   confidence_score?: number | null
+  image_quality_score?: number | null
   ocr_text?: string | null
   processing_metadata?: Record<string, unknown> | null
   last_sale_price?: number | null

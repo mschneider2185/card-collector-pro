@@ -374,7 +374,12 @@ IMPORTANT: Return ONLY a valid JSON object with these exact fields (omit fields 
     "patch": boolean (true if PATCH, JERSEY, fabric swatch, game-used, material, Rookie Ticket style, etc.)
   },
   "confidence": 0.0-1.0 (number),
-  "raw_ocr_text": "string — transcribe ALL visible text from the images; label sections FRONT OF CARD: and BACK OF CARD: when both are shown"
+  "raw_ocr_text": "string — transcribe ALL visible text from the images; label sections FRONT OF CARD: and BACK OF CARD: when both are shown",
+  "image_quality": {
+    "score": 0.0-1.0 (number — overall image quality for collection purposes),
+    "issues": [] (array of strings — any of: "glitched", "blurry", "too_dark", "too_bright", "partial_card", "screenshot_of_screen", "low_resolution", "heavy_glare", "obstructed"),
+    "is_physical_card": boolean (true if this is a direct photo of a physical card; false if it appears to be a screenshot of a card image on a screen, a scan of a printout, or a digital mockup)
+  }
 }
 
 Recognition guidelines:
@@ -391,6 +396,14 @@ CRITICAL — BRAND vs SET NAME:
 - "card_brand" is ONLY the manufacturer: "Topps", "Panini", "Upper Deck", etc.
 - "set_name" is the specific product line: "Series Two", "Chrome", "Prizm", "Contenders", "UD NHL Rookie Box Set", etc.
 - Do NOT repeat the brand in set_name. Example: brand="Topps" set_name="Series Two" (NOT "Topps Series Two")
+
+IMAGE QUALITY ASSESSMENT:
+Evaluate the image quality for a card collection application:
+- score >= 0.7: Clear, well-lit photo of a physical card suitable for collection records
+- score 0.4-0.69: Usable but has noticeable issues (minor blur, glare, slight angle)
+- score < 0.4: Poor quality — glitched/corrupted image data, severely blurry, mostly obscured, or not a real card photo
+- is_physical_card: false if you see screen pixels, moire patterns, UI elements, browser chrome, or other signs this is a screenshot/photo of a screen displaying a card image rather than a direct photo of a physical card
+- Report ALL quality issues detected in the "issues" array
 
 Use the back image when present for set name, manufacturer, copyright year, and card numbering.
 

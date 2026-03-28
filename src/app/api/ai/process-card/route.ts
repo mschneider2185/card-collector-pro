@@ -209,7 +209,8 @@ export async function POST(request: NextRequest) {
           rookie: extractedData.attributes?.rookie ?? false,
           autographed: extractedData.attributes?.autographed ?? false,
           patch: extractedData.attributes?.patch ?? false,
-          source_upload_id: uploadId
+          source_upload_id: uploadId,
+          image_quality_score: extractedData.image_quality?.score ?? null,
         }
 
         const { data: existingCard } = await supabase
@@ -279,7 +280,7 @@ export async function POST(request: NextRequest) {
           console.error('Set matching failed (non-blocking):', matchErr)
         }
 
-        send({ status: 'completed', extractedData, setMatch })
+        send({ status: 'completed', extractedData, setMatch, imageQuality: extractedData.image_quality ?? null })
       } catch (error) {
         console.error('Edge processing error:', error)
         const message = error instanceof Error ? error.message : 'Unknown error'
